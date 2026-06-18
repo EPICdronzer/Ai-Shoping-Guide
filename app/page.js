@@ -1,65 +1,474 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useRef, useEffect, useCallback } from 'react';
+import ProductCard from './components/ProductCard';
+import TypingIndicator from './components/TypingIndicator';
+import SuggestionChips from './components/SuggestionChips';
+import { getClientSuggestions } from './lib/suggestions';
+
+const WELCOME_MSG = {
+  id: 'welcome',
+  role: 'bot',
+  type: 'text',
+  content: "👋 Hi! I'm **ShopMind AI** — your personal shopping assistant.\n\nJust describe what you're looking for, like *\"waterproof running shoes under ₹3000\"* or *\"best gaming laptop under ₹60,000\"* and I'll search the web, compare results, and give you a clean summary instantly!",
+  time: new Date(),
+};
+
+function formatTime(d) {
+  return new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function renderMarkdown(text) {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/\n/g, '<br/>');
+}
+
+function highlightMatch(text, query) {
+  if (!query) return text;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return text;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <span className="autocomplete-match">{text.slice(idx, idx + query.length)}</span>
+      {text.slice(idx + query.length)}
+    </>
+  );
+}
+
+const SEARCH_ICONS = ['👟', '💻', '📱', '🎧', '⌚', '📷', '🖥️', '🎮', '👕', '🎒'];
+function getIcon(text) {
+  const t = text.toLowerCase();
+  if (t.includes('shoe') || t.includes('sneaker') || t.includes('boot')) return '👟';
+  if (t.includes('laptop') || t.includes('notebook')) return '💻';
+  if (t.includes('phone') || t.includes('mobile') || t.includes('iphone') || t.includes('samsung')) return '📱';
+  if (t.includes('headphone') || t.includes('earphone') || t.includes('airpod') || t.includes('earbud')) return '🎧';
+  if (t.includes('watch')) return '⌚';
+  if (t.includes('camera')) return '📷';
+  if (t.includes('tv') || t.includes('monitor') || t.includes('screen')) return '🖥️';
+  if (t.includes('gaming') || t.includes('game')) return '🎮';
+  if (t.includes('bag') || t.includes('backpack')) return '🎒';
+  if (t.includes('tablet') || t.includes('ipad')) return '📟';
+  return '🔍';
+}
 
 export default function Home() {
+  const [messages, setMessages] = useState([WELCOME_MSG]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [chatHistory, setChatHistory] = useState([]);
+
+  // Autocomplete state
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [activeSuggestion, setActiveSuggestion] = useState(-1);
+
+  const chatEndRef = useRef(null);
+  const textareaRef = useRef(null);
+  const inputAreaRef = useRef(null);
+
+  // Auto-scroll to bottom
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isLoading]);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px';
+    }
+  }, [input]);
+
+  // Click outside → close dropdown
+  useEffect(() => {
+    const handler = (e) => {
+      if (inputAreaRef.current && !inputAreaRef.current.contains(e.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Instant client-side suggestions — zero API calls
+  useEffect(() => {
+    const trimmed = input.trim();
+    if (trimmed.length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    const results = getClientSuggestions(trimmed);
+    setSuggestions(results);
+    setShowSuggestions(results.length > 0);
+    setActiveSuggestion(-1);
+  }, [input]);
+
+  const addMessage = (msg) =>
+    setMessages((prev) => [...prev, { id: Date.now() + Math.random(), time: new Date(), ...msg }]);
+
+  const isShoppingQuery = (text) => {
+    const kw = [
+      'buy','purchase','shop','price','cost','cheap','affordable','best','top','under','budget',
+      'recommend','suggest','find','search','₹','rs','rupee','shoes','laptop','phone','mobile',
+      'headphone','watch','bag','camera','tablet','earphone','keyboard','mouse','monitor','tv',
+      'refrigerator','washing','ac','cooler','fan','shirt','dress','jacket','jeans','sneakers',
+      'sandals','gaming','iphone','samsung','oneplus','redmi','realme','xiaomi','oppo','vivo',
+    ];
+    const lower = text.toLowerCase();
+    return kw.some((k) => lower.includes(k));
+  };
+
+  const handleSearch = useCallback(async (queryText) => {
+    const trimmed = (queryText || input).trim();
+    if (!trimmed || isLoading) return;
+
+    setInput('');
+    setSuggestions([]);
+    setShowSuggestions(false);
+    setIsLoading(true);
+
+    addMessage({ role: 'user', type: 'text', content: trimmed });
+    const newHistory = [...chatHistory, { role: 'user', content: trimmed }];
+    setChatHistory(newHistory);
+
+    try {
+      if (isShoppingQuery(trimmed)) {
+        const res = await fetch('/api/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: trimmed, history: chatHistory }),
+        });
+        const data = await res.json();
+
+        if (!res.ok || data.error) {
+          addMessage({ role: 'bot', type: 'error', content: data.error || 'Something went wrong.' });
+        } else {
+          addMessage({
+            role: 'bot',
+            type: 'search-result',
+            summary: data.summary,
+            recommendation: data.recommendation,
+            products: data.products || [],
+            followUpSuggestions: data.followUpSuggestions || [],
+            noResultsMessage: data.noResultsMessage,
+            searchQuery: data.searchQuery,
+            aiPowered: data.aiPowered,
+          });
+          setChatHistory([...newHistory, {
+            role: 'assistant',
+            content: `${data.summary} ${data.recommendation || ''}`,
+          }]);
+        }
+      } else {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: trimmed, history: chatHistory }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          addMessage({ role: 'bot', type: 'error', content: data.error || 'Something went wrong.' });
+        } else {
+          addMessage({ role: 'bot', type: 'text', content: data.reply });
+          setChatHistory([...newHistory, { role: 'assistant', content: data.reply }]);
+        }
+      }
+    } catch {
+      addMessage({ role: 'bot', type: 'error', content: '⚠️ Network error. Please check your connection.' });
+    } finally {
+      setIsLoading(false);
+      textareaRef.current?.focus();
+    }
+  }, [input, isLoading, chatHistory]);
+
+  const handleKeyDown = (e) => {
+    if (showSuggestions && suggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setActiveSuggestion((prev) => Math.min(prev + 1, suggestions.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActiveSuggestion((prev) => Math.max(prev - 1, -1));
+        return;
+      }
+      if (e.key === 'Tab' && activeSuggestion >= 0) {
+        e.preventDefault();
+        setInput(suggestions[activeSuggestion]);
+        setShowSuggestions(false);
+        return;
+      }
+      if (e.key === 'Escape') {
+        setShowSuggestions(false);
+        return;
+      }
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (activeSuggestion >= 0 && showSuggestions) {
+        handleSearch(suggestions[activeSuggestion]);
+      } else {
+        handleSearch(input);
+      }
+    }
+  };
+
+  const handleSuggestionClick = (s) => {
+    setInput(s);
+    setShowSuggestions(false);
+    handleSearch(s);
+  };
+
+  const clearChat = () => {
+    setMessages([WELCOME_MSG]);
+    setChatHistory([]);
+    setInput('');
+    setSuggestions([]);
+    setShowSuggestions(false);
+  };
+
+  const isWelcome = messages.length === 1 && messages[0].id === 'welcome';
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.js file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <>
+      {/* Animated background */}
+      <div className="bg-orbs" aria-hidden="true">
+        <div className="bg-orb bg-orb-1" />
+        <div className="bg-orb bg-orb-2" />
+        <div className="bg-orb bg-orb-3" />
+      </div>
+      <div className="bg-grid" aria-hidden="true" />
+
+      <div className="app-wrapper">
+        {/* ── HEADER ── */}
+        <header className="header">
+          <div className="header-brand">
+            <div className="bot-avatar" aria-hidden="true">🛍️</div>
+            <div>
+              <div className="header-title">ShopMind AI</div>
+              <div className="header-subtitle">
+                <span>✦</span> Powered by Gemini + Google Shopping
+              </div>
+            </div>
+          </div>
+          <div className="header-right">
+            <div className="status-badge">
+              <div className="status-dot" />
+              Online
+            </div>
+            {!isWelcome && (
+              <button className="clear-btn" onClick={clearChat} id="clear-chat-btn">
+                ✕ New Chat
+              </button>
+            )}
+          </div>
+        </header>
+
+        {/* ── CHAT AREA ── */}
+        <main className="chat-area" id="chat-area" role="main">
+          {isWelcome ? (
+            <>
+              <div className="welcome-screen">
+                <div className="welcome-orb" aria-hidden="true">🛍️</div>
+                <div>
+                  <h1 className="welcome-title">Your AI Shopping<br />Assistant</h1>
+                  <p className="welcome-subtitle" style={{ marginTop: '14px' }}>
+                    Stop wasting time on 10 tabs. Describe what you want and get instant comparisons, prices, and AI-powered recommendations.
+                  </p>
+                </div>
+                <div className="welcome-features">
+                  {['🔍 Web Search', '⚖️ AI Compare', '💰 Price Filter', '⭐ Smart Rank', '🇮🇳 India Focused'].map((f) => (
+                    <div className="feature-pill" key={f}>{f}</div>
+                  ))}
+                </div>
+              </div>
+              <SuggestionChips onSelect={handleSearch} />
+            </>
+          ) : (
+            messages.map((msg) => (
+              <MessageRenderer key={msg.id} msg={msg} onFollowUp={handleSearch} />
+            ))
+          )}
+          {isLoading && <TypingIndicator />}
+          <div ref={chatEndRef} />
+        </main>
+
+        {/* ── INPUT AREA ── */}
+        <div className="input-area" ref={inputAreaRef}>
+          {/* Autocomplete Dropdown */}
+          {showSuggestions && (
+            <div className="autocomplete-dropdown" role="listbox" id="autocomplete-dropdown">
+              <div className="autocomplete-header">
+                💡 Suggestions
+              </div>
+              {suggestions.map((s, i) => (
+                <div
+                  key={i}
+                  className={`autocomplete-item ${i === activeSuggestion ? 'active' : ''}`}
+                  role="option"
+                  aria-selected={i === activeSuggestion}
+                  onClick={() => handleSuggestionClick(s)}
+                  onMouseEnter={() => setActiveSuggestion(i)}
+                >
+                  <span className="autocomplete-icon">{getIcon(s)}</span>
+                  <span style={{ flex: 1 }}>{highlightMatch(s, input.trim())}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Input row */}
+          <div className="input-wrapper" id="input-wrapper">
+            <textarea
+              ref={textareaRef}
+              className="chat-input"
+              id="chat-input"
+              placeholder='Describe what you want… e.g. "best headphones under ₹2000"'
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                if (e.target.value.trim().length >= 2) setShowSuggestions(true);
+                else setShowSuggestions(false);
+              }}
+              onKeyDown={handleKeyDown}
+              onFocus={() => { if (suggestions.length > 0 && input.trim().length >= 2) setShowSuggestions(true); }}
+              rows={1}
+              disabled={isLoading}
+              autoComplete="off"
+              aria-label="Search input"
+              aria-autocomplete="list"
+              aria-controls="autocomplete-dropdown"
+            />
+            <button
+              className="send-btn"
+              id="send-btn"
+              onClick={() => handleSearch(input)}
+              disabled={isLoading || !input.trim()}
+              aria-label="Send message"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+              {isLoading ? '⏳' : '🚀'}
+            </button>
+          </div>
+          <p className="input-hint">
+            <span>↵ Enter to search</span> · <span>↑↓ navigate suggestions</span> · <span>Tab to select</span>
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </div>
+    </>
+  );
+}
+
+/* ─────────────────────────────────────────────
+   MESSAGE RENDERER
+───────────────────────────────────────────── */
+function MessageRenderer({ msg, onFollowUp }) {
+  if (msg.role === 'user') {
+    return (
+      <div className="message-wrapper user">
+        <div className="msg-avatar user">👤</div>
+        <div className="msg-body">
+          <div className="msg-bubble user">{msg.content}</div>
+          <div className="msg-time">{formatTime(msg.time)}</div>
         </div>
-      </main>
+      </div>
+    );
+  }
+
+  if (msg.type === 'error') {
+    return (
+      <div className="message-wrapper">
+        <div className="msg-avatar bot">🤖</div>
+        <div className="msg-body">
+          <div className="error-bubble">⚠️ {msg.content}</div>
+          <div className="msg-time">{formatTime(msg.time)}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (msg.type === 'search-result') {
+    return (
+      <div className="message-wrapper">
+        <div className="msg-avatar bot">🤖</div>
+        <div className="msg-body" style={{ maxWidth: '100%', width: '100%' }}>
+
+          {/* AI Summary */}
+          {(msg.summary || msg.recommendation) && (
+            <div className="ai-summary">
+              <div className="ai-summary-header">
+                ✦ AI Analysis
+                {msg.searchQuery && (
+                  <span className="search-tag">🔍 "{msg.searchQuery}"</span>
+                )}
+              </div>
+              {msg.summary && <p>{msg.summary}</p>}
+              {msg.recommendation && (
+                <div className="ai-recommendation">
+                  <span>🏆</span>
+                  <span>{msg.recommendation}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* No results */}
+          {msg.noResultsMessage && !msg.products?.length && (
+            <div className="msg-bubble bot" style={{ marginTop: 8 }}>
+              🔍 {msg.noResultsMessage}
+            </div>
+          )}
+
+          {/* Product Cards */}
+          {msg.products?.length > 0 && (
+            <div className="products-section" style={{ marginTop: 14 }}>
+              <div className="products-header">
+                🛒 Products Found
+                <span className="products-count">{msg.products.length}</span>
+              </div>
+              <div className="products-grid">
+                {msg.products.map((p, i) => (
+                  <ProductCard key={i} product={p} index={i} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Follow-ups */}
+          {msg.followUpSuggestions?.length > 0 && (
+            <div className="followup-wrap">
+              <p className="followup-label">💬 Ask a follow-up…</p>
+              <div className="followup-chips">
+                {msg.followUpSuggestions.map((s, i) => (
+                  <button key={i} className="followup-chip" onClick={() => onFollowUp(s)}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="msg-time">{formatTime(msg.time)}</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Default text
+  return (
+    <div className="message-wrapper">
+      <div className="msg-avatar bot">🤖</div>
+      <div className="msg-body">
+        <div
+          className="msg-bubble bot"
+          dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
+        />
+        <div className="msg-time">{formatTime(msg.time)}</div>
+      </div>
     </div>
   );
 }
