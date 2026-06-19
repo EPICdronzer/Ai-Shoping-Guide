@@ -87,7 +87,7 @@ export async function POST(request) {
     // ── Step 2: ONE SerpAPI call (with price cap baked in) ─────────
     const shoppingResults = await searchGoogleShopping(cleanQuery, maxPrice);
 
-    // ── Step 3: Map + price-filter products ────────────────────────
+    // ── Step 3: Map + strict price-filter ──────────────────────────
     let products = shoppingResults.slice(0, 10).map((item) => ({
       title: item.title,
       price: item.price,
@@ -102,31 +102,92 @@ export async function POST(request) {
 
     if (maxPrice && products.length > 0) {
       // Only keep products whose price is known AND within budget
-      // (old bug: !p.extracted_price let priceless ₹99k items slip through)
       const filtered = products.filter(
         (p) => p.extracted_price && p.extracted_price <= maxPrice
       );
-      if (filtered.length > 0) products = filtered;
+      // If nothing passes the budget filter, keep products empty —
+      // NEVER fall back to out-of-budget items
+      products = filtered;
     }
     products = products.slice(0, 6);
 
-    // ── Step 4: ONE Gemini call — intent + summary combined ─────────
+    // ── Step 4a: No results within budget → honest AI response ─────
+    if (products.length === 0 && maxPrice) {
+      let noResultsData = {
+        summary: `We couldn't find any reliable results for "${cleanQuery}" under ₹${maxPrice.toLocaleString('en-IN')}. This budget may not be realistic for this product.`,
+        alternatives: [],
+        followUpSuggestions: [
+          `Best ${cleanQuery} under ₹${(maxPrice * 2).toLocaleString('en-IN')}`,
+          `Budget alternatives to ${cleanQuery}`,
+          `Refurbished ${cleanQuery} under ₹${maxPrice.toLocaleString('en-IN')}`,
+        ],
+      };
+
+      try {
+        const prompt = `You are ShopMind AI, an honest Indian shopping assistant.
+
+A user searched: "${query}"
+
+No products were found within ₹${maxPrice.toLocaleString('en-IN')} budget.
+
+Reply ONLY with valid JSON (no markdown):
+{
+  "summary": "1-2 honest sentences explaining why this product can't be found in this budget in India (e.g. minimum price, market reality)",
+  "alternatives": [
+    { "title": "Alternative product name", "reason": "Why it's a good substitute", "approxPrice": "approx price in ₹" }
+  ],
+  "followUpSuggestions": ["3 alternative searches the user could try"]
+}
+alternatives: suggest 2-3 REAL products that ARE available within or close to the budget. Do NOT make up products.`;
+
+        const raw = await generateWithFallback(prompt);
+        const cleaned = raw.trim().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        const parsed = JSON.parse(cleaned);
+        noResultsData = { ...noResultsData, ...parsed };
+      } catch (err) {
+        console.warn('No-results AI skipped:', err.message?.slice(0, 60));
+      }
+
+      return Response.json({
+        products: [],
+        summary: noResultsData.summary,
+        recommendation: null,
+        alternatives: noResultsData.alternatives || [],
+        followUpSuggestions: noResultsData.followUpSuggestions || [],
+        noResultsMessage: noResultsData.summary,
+        budgetNotRealistic: true,
+        searchQuery: cleanQuery,
+      });
+    }
+
+    // ── Step 4b: No results at all (no budget query) ───────────────
+    if (products.length === 0) {
+      return Response.json({
+        products: [],
+        summary: `No products found for "${query}". Try a different search term.`,
+        recommendation: null,
+        alternatives: [],
+        followUpSuggestions: [`Best ${cleanQuery} in India`, `${cleanQuery} under ₹10,000`, `Popular ${cleanQuery} brands`],
+        noResultsMessage: `No products found for "${query}". Try broadening your search.`,
+        searchQuery: cleanQuery,
+      });
+    }
+
+    // ── Step 5: Normal flow — Gemini summary + badges ───────────────
     let aiData = {
       summary: `Found ${products.length} results for "${query}".`,
-      recommendation: products.length > 0 ? 'Check the top-rated option for the best experience.' : null,
+      recommendation: 'Check the top-rated option for the best experience.',
       badges: products.map((_, i) => (i === 0 ? 'top' : i === products.length - 1 ? 'budget' : null)),
       followUpSuggestions: ['Show only top-rated ones', 'Find cheaper alternatives', 'Compare features'],
       aiPowered: false,
     };
 
-    if (products.length > 0) {
-      try {
-        const productList = products
-          .map((p, i) => `${i + 1}. ${p.title} | ${p.price || 'N/A'} | ${p.source || ''} | ⭐${p.rating || 'N/A'}`)
-          .join('\n');
+    try {
+      const productList = products
+        .map((p, i) => `${i + 1}. ${p.title} | ${p.price || 'N/A'} | ${p.source || ''} | ⭐${p.rating || 'N/A'}`)
+        .join('\n');
 
-        // SINGLE combined prompt — saves 1 API call per search
-        const prompt = `You are ShopMind AI, an Indian shopping assistant. User asked: "${query}"
+      const prompt = `You are ShopMind AI, an Indian shopping assistant. User asked: "${query}"
 
 Products found:
 ${productList}
@@ -140,13 +201,12 @@ Reply ONLY with valid JSON (no markdown):
 }
 badges: "top"=best overall, "value"=best value, "budget"=cheapest good one, null=others. Array must have ${products.length} items.`;
 
-        const raw = await generateWithFallback(prompt);
-        const cleaned = raw.trim().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        const parsed = JSON.parse(cleaned);
-        aiData = { ...aiData, ...parsed, aiPowered: true };
-      } catch (err) {
-        console.warn('AI summary skipped:', err.message?.slice(0, 60));
-      }
+      const raw = await generateWithFallback(prompt);
+      const cleaned = raw.trim().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const parsed = JSON.parse(cleaned);
+      aiData = { ...aiData, ...parsed, aiPowered: true };
+    } catch (err) {
+      console.warn('AI summary skipped:', err.message?.slice(0, 60));
     }
 
     // Apply badges
@@ -158,10 +218,11 @@ badges: "top"=best overall, "value"=best value, "budget"=cheapest good one, null
       products,
       summary: aiData.summary,
       recommendation: aiData.recommendation,
+      alternatives: [],
       followUpSuggestions: aiData.followUpSuggestions || [],
-      noResultsMessage: products.length === 0 ? 'No products found. Try a different search.' : null,
+      noResultsMessage: null,
       searchQuery: cleanQuery,
-      apiCalls: 2, // SerpAPI: 1 + Gemini: 1
+      apiCalls: 2,
     });
 
   } catch (error) {

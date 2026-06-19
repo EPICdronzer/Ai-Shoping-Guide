@@ -24,8 +24,24 @@ export default function ProductCard({ product, index }) {
     return price;
   };
 
+  // SerpAPI returns the URL under different field names depending on engine/version
+  const productUrl = product.link || product.product_link || product.serpapi_link || null;
+
+  const handleCardClick = () => {
+    if (productUrl) {
+      window.open(productUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   return (
-    <div className="product-card">
+    <div
+      className={`product-card ${productUrl ? 'product-card-clickable' : ''}`}
+      onClick={handleCardClick}
+      role={productUrl ? 'link' : undefined}
+      tabIndex={productUrl ? 0 : undefined}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleCardClick(); }}
+      aria-label={productUrl ? `View deal for ${product.title}` : product.title}
+    >
       {badge && <span className={`product-badge ${badge.cls}`}>{badge.label}</span>}
 
       {/* Fixed-height image area */}
@@ -48,7 +64,7 @@ export default function ProductCard({ product, index }) {
         </div>
       </div>
 
-      {/* Card body — flex-grow so all cards stretch to same height */}
+      {/* Card body */}
       <div className="product-info">
         {product.source && <div className="product-store">{product.source}</div>}
 
@@ -63,15 +79,9 @@ export default function ProductCard({ product, index }) {
           </div>
         )}
 
-        <a
-          href={product.link || '#'}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="product-btn"
-          onClick={(e) => { if (!product.link) e.preventDefault(); }}
-        >
-          View Deal →
-        </a>
+        <div className={`product-btn ${!productUrl ? 'product-btn-disabled' : ''}`}>
+          {productUrl ? 'View Deal →' : 'No link available'}
+        </div>
       </div>
     </div>
   );

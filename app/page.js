@@ -153,8 +153,10 @@ export default function Home() {
             summary: data.summary,
             recommendation: data.recommendation,
             products: data.products || [],
+            alternatives: data.alternatives || [],
             followUpSuggestions: data.followUpSuggestions || [],
             noResultsMessage: data.noResultsMessage,
+            budgetNotRealistic: data.budgetNotRealistic || false,
             searchQuery: data.searchQuery,
             aiPowered: data.aiPowered,
           });
@@ -416,8 +418,40 @@ function MessageRenderer({ msg, onFollowUp }) {
             </div>
           )}
 
-          {/* No results */}
-          {msg.noResultsMessage && !msg.products?.length && (
+          {/* No results within budget — honest message + alternatives */}
+          {!msg.products?.length && msg.budgetNotRealistic && (
+            <div className="no-results-card">
+              <div className="no-results-header">
+                <span>😔</span>
+                <span>No results found in this budget</span>
+              </div>
+              <p className="no-results-msg">{msg.summary}</p>
+
+              {msg.alternatives?.length > 0 && (
+                <div className="alternatives-section">
+                  <div className="alternatives-label">💡 Try these alternatives instead:</div>
+                  {msg.alternatives.map((alt, i) => (
+                    <div key={i} className="alternative-item">
+                      <div className="alternative-title">{alt.title}</div>
+                      <div className="alternative-meta">
+                        <span className="alternative-price">~{alt.approxPrice}</span>
+                        <span className="alternative-reason">{alt.reason}</span>
+                      </div>
+                      <button
+                        className="alternative-search-btn"
+                        onClick={() => onFollowUp(alt.title)}
+                      >
+                        🔍 Search this
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Generic no results (no budget) */}
+          {!msg.products?.length && !msg.budgetNotRealistic && msg.noResultsMessage && (
             <div className="msg-bubble bot" style={{ marginTop: 8 }}>
               🔍 {msg.noResultsMessage}
             </div>
