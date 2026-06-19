@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import axios from 'axios';
-const gemini_key = process.env.GEMINI_API_KEY;
+import config from '@/lib/config';
+const gemini_key = config.GEMINI_API_KEY;
 const genAI = new GoogleGenerativeAI(gemini_key);
 
 const MODEL_CHAIN = [
@@ -26,7 +27,7 @@ async function generateWithFallback(prompt) {
   }
   throw lastError;
 }
-const serpapi_key = process.env.SERPAPI_KEY;
+const serpapi_key = config.SERPAPI_KEY;
 // SINGLE SerpAPI call — only Google Shopping
 async function searchGoogleShopping(query) {
   try {

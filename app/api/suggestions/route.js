@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-const gemini_key = process.env.GEMINI_API_KEY;
+import config from '@/lib/config';
+const gemini_key = config.GEMINI_API_KEY;
 
 const genAI = new GoogleGenerativeAI(gemini_key);
 
