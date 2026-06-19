@@ -29,17 +29,24 @@ async function generateWithFallback(prompt) {
 }
 const serpapi_key = config.SERPAPI_KEY;
 // SINGLE SerpAPI call — only Google Shopping
-async function searchGoogleShopping(query) {
+async function searchGoogleShopping(query, maxPrice) {
   try {
+    const params = {
+      engine: 'google_shopping',
+      q: query,
+      api_key: serpapi_key,
+      gl: 'in',
+      hl: 'en',
+      num: 10,
+    };
+
+    // Pass price ceiling directly to Google Shopping so results come pre-filtered
+    if (maxPrice) {
+      params.tbs = `mr:1,price:1,ppr_max:${maxPrice}`;
+    }
+
     const response = await axios.get('https://serpapi.com/search', {
-      params: {
-        engine: 'google_shopping',
-        q: query,
-        api_key: serpapi_key,
-        gl: 'in',
-        hl: 'en',
-        num: 10,
-      },
+      params,
       timeout: 10000,
     });
     return response.data.shopping_results || [];
@@ -77,8 +84,8 @@ export async function POST(request) {
       .replace(/[₹]\s*\d[\d,]*/g, '')
       .trim() || query;
 
-    // ── Step 2: ONE SerpAPI call ────────────────────────────────────
-    const shoppingResults = await searchGoogleShopping(cleanQuery);
+    // ── Step 2: ONE SerpAPI call (with price cap baked in) ─────────
+    const shoppingResults = await searchGoogleShopping(cleanQuery, maxPrice);
 
     // ── Step 3: Map + price-filter products ────────────────────────
     let products = shoppingResults.slice(0, 10).map((item) => ({
@@ -94,7 +101,11 @@ export async function POST(request) {
     }));
 
     if (maxPrice && products.length > 0) {
-      const filtered = products.filter((p) => !p.extracted_price || p.extracted_price <= maxPrice);
+      // Only keep products whose price is known AND within budget
+      // (old bug: !p.extracted_price let priceless ₹99k items slip through)
+      const filtered = products.filter(
+        (p) => p.extracted_price && p.extracted_price <= maxPrice
+      );
       if (filtered.length > 0) products = filtered;
     }
     products = products.slice(0, 6);
