@@ -566,6 +566,44 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.7px;
 }
+.product-card-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+.card-compare-btn {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-2);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: all var(--dur) var(--ease);
+  font-family: 'Inter', sans-serif;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.card-compare-btn:hover {
+  background: var(--violet-dim);
+  border-color: var(--border-glow);
+  color: var(--violet-light);
+}
+.card-compare-btn.active {
+  background: var(--violet);
+  border-color: var(--violet-light);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(124, 58, 237, 0.35);
+}
+.product-card-comparing {
+  border-color: var(--border-glow) !important;
+  box-shadow: var(--glow-violet), var(--shadow-card) !important;
+}
 .product-name {
   font-size: 13px;
   font-weight: 500;
@@ -1245,3 +1283,355 @@ body.light .status-badge { background: rgba(16,185,129,0.08); }
   border-color: rgba(124,58,237,0.5);
   transform: translateY(-1px);
 }
+
+/* ============================================
+   FOLLOW-UP CONTEXT BANNER
+   ============================================ */
+.followup-context-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(124, 58, 237, 0.06);
+  border: 1px solid rgba(124, 58, 237, 0.15);
+  border-radius: var(--r-md);
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--violet-light);
+  margin-bottom: 8px;
+  backdrop-filter: blur(10px);
+  animation: fadeInDown 0.3s var(--ease);
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.gemini-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: var(--r-md);
+  padding: 10px 14px;
+  font-size: 12.5px;
+  color: #fca5a5;
+  margin-bottom: 8px;
+  backdrop-filter: blur(10px);
+  animation: fadeInDown 0.3s var(--ease);
+}
+
+/* ============================================
+   FLOATING COMPARE BAR
+   ============================================ */
+.floating-compare-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(12, 8, 32, 0.85);
+  border: 1px solid var(--border-glow);
+  border-radius: var(--r-xl);
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  width: calc(100% - 40px);
+  max-width: 700px;
+  box-shadow: var(--shadow-float), var(--glow-violet);
+  backdrop-filter: blur(20px);
+  z-index: 999;
+  animation: slideUp 0.3s var(--ease);
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translate(-50%, 20px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.compare-bar-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.compare-bar-icon {
+  font-size: 20px;
+}
+.compare-bar-text {
+  font-size: 14px;
+  color: var(--text-2);
+}
+.compare-bar-text strong {
+  color: var(--violet-light);
+}
+
+.compare-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.compare-bar-clear {
+  background: transparent;
+  border: none;
+  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 6px 12px;
+  transition: color var(--dur) var(--ease);
+}
+.compare-bar-clear:hover {
+  color: var(--text-1);
+}
+.compare-bar-btn {
+  background: var(--grad-brand);
+  border: none;
+  border-radius: var(--r-pill);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 20px;
+  cursor: pointer;
+  transition: all var(--dur) var(--ease);
+  box-shadow: 0 4px 15px rgba(124, 58, 237, 0.3);
+}
+.compare-bar-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.5);
+}
+.compare-bar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+
+/* ============================================
+   COMPARE MODAL OVERLAY
+   ============================================ */
+.compare-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 3, 14, 0.85);
+  backdrop-filter: blur(12px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.25s var(--ease);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.compare-modal {
+  background: rgba(12, 8, 32, 0.95);
+  border: 1px solid var(--border-glow);
+  border-radius: var(--r-lg);
+  width: 100%;
+  max-width: 900px;
+  max-height: calc(100vh - 40px);
+  box-shadow: var(--shadow-float), var(--glow-violet);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: zoomIn 0.3s var(--ease);
+}
+
+@keyframes zoomIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.compare-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border);
+}
+.compare-header-title {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+.compare-close-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all var(--dur) var(--ease);
+}
+.compare-close-btn:hover {
+  background: rgba(255,255,255,0.1);
+  color: var(--text-1);
+}
+
+.compare-body {
+  overflow: auto;
+  padding: 24px;
+}
+
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.compare-table th, .compare-table td {
+  padding: 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  vertical-align: top;
+}
+
+.feature-col {
+  width: 20%;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.product-col {
+  width: calc(80% / 3);
+}
+
+.compare-prod-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.compare-prod-img-wrap {
+  width: 100%;
+  height: 120px;
+  background: rgba(255,255,255,0.02);
+  border-radius: var(--r-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 8px;
+}
+.compare-prod-img-wrap img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.compare-prod-fallback {
+  font-size: 40px;
+  opacity: 0.2;
+}
+
+.compare-prod-store {
+  font-size: 9px;
+  color: var(--cyan);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.compare-prod-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.feature-name {
+  color: var(--text-2);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.feature-val {
+  font-size: 13.5px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+.price-val {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lowest-price-tag {
+  background: var(--grad-brand);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.lowest-badge {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: var(--r-pill);
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--green);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.spec-text {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
+  color: var(--violet-light);
+}
+
+.compare-rating-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.compare-deal-btn {
+  display: inline-block;
+  background: linear-gradient(135deg, rgba(124,58,237,0.15), rgba(6,182,212,0.08));
+  border: 1px solid rgba(124,58,237,0.25);
+  border-radius: var(--r-sm);
+  color: var(--violet-light);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 16px;
+  text-decoration: none;
+  text-align: center;
+  transition: all var(--dur) var(--ease);
+}
+.compare-deal-btn:hover {
+  background: linear-gradient(135deg, rgba(124,58,237,0.35), rgba(6,182,212,0.15));
+  border-color: rgba(124,58,237,0.5);
+  color: #fff;
+  transform: translateY(-1px);
+}
+.compare-deal-btn.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+

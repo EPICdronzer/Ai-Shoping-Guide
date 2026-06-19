@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import ProductCard from './components/ProductCard';
 import TypingIndicator from './components/TypingIndicator';
 import SuggestionChips from './components/SuggestionChips';
+import CompareModal from './components/CompareModal';
 import { getClientSuggestions } from './lib/suggestions';
 
 const WELCOME_MSG = {
@@ -59,6 +60,23 @@ export default function Home() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [chatHistory, setChatHistory] = useState([]);
+  const [compareProducts, setCompareProducts] = useState([]);
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
+
+  const handleCompareToggle = useCallback((product) => {
+    setCompareProducts((prev) => {
+      const exists = prev.some((p) => p.title === product.title && p.price === product.price);
+      if (exists) {
+        return prev.filter((p) => !(p.title === product.title && p.price === product.price));
+      } else {
+        if (prev.length >= 3) {
+          alert("You can compare up to 3 products at a time.");
+          return prev;
+        }
+        return [...prev, product];
+      }
+    });
+  }, []);
 
   // Autocomplete state
   const [suggestions, setSuggestions] = useState([]);
@@ -117,6 +135,7 @@ export default function Home() {
       'headphone','watch','bag','camera','tablet','earphone','keyboard','mouse','monitor','tv',
       'refrigerator','washing','ac','cooler','fan','shirt','dress','jacket','jeans','sneakers',
       'sandals','gaming','iphone','samsung','oneplus','redmi','realme','xiaomi','oppo','vivo',
+      'compare','rating','review','alternative','select','choose','versus','vs','show only','other','different'
     ];
     const lower = text.toLowerCase();
     return kw.some((k) => lower.includes(k));
@@ -158,11 +177,32 @@ export default function Home() {
             noResultsMessage: data.noResultsMessage,
             budgetNotRealistic: data.budgetNotRealistic || false,
             searchQuery: data.searchQuery,
+            resolvedQuery: data.resolvedQuery,
+            isFollowUp: data.isFollowUp || false,
+            contextSummary: data.contextSummary,
             aiPowered: data.aiPowered,
+            geminiError: data.geminiError || false,
           });
+
+          // Build a rich assistant memory entry that includes actual product results
+          // so future follow-up queries know exactly what was found
+          const productSummaryForMemory = (data.products || []).length > 0
+            ? `Found ${data.products.length} products:\n` +
+              data.products
+                .map((p, i) => `  ${i + 1}. ${p.title} | ${p.price || 'N/A'} | ⭐${p.rating || 'N/A'} | ${p.source || ''}`)
+                .join('\n')
+            : 'No products found within budget.';
+
+          const assistantMemory = [
+            data.summary,
+            data.recommendation ? `Recommendation: ${data.recommendation}` : '',
+            `Search resolved to: "${data.resolvedQuery || data.searchQuery}"`,
+            productSummaryForMemory,
+          ].filter(Boolean).join('\n');
+
           setChatHistory([...newHistory, {
             role: 'assistant',
-            content: `${data.summary} ${data.recommendation || ''}`,
+            content: assistantMemory,
           }]);
         }
       } else {
@@ -293,7 +333,13 @@ export default function Home() {
             </>
           ) : (
             messages.map((msg) => (
-              <MessageRenderer key={msg.id} msg={msg} onFollowUp={handleSearch} />
+              <MessageRenderer 
+                key={msg.id} 
+                msg={msg} 
+                onFollowUp={handleSearch} 
+                compareProducts={compareProducts}
+                onCompareToggle={handleCompareToggle}
+              />
             ))
           )}
           {isLoading && <TypingIndicator />}
@@ -361,6 +407,37 @@ export default function Home() {
           </p>
         </div>
       </div>
+
+      {/* Floating Compare Bar */}
+      {compareProducts.length > 0 && (
+        <div className="floating-compare-bar">
+          <div className="compare-bar-info">
+            <span className="compare-bar-icon">⚖️</span>
+            <span className="compare-bar-text">
+              <strong>{compareProducts.length}</strong> {compareProducts.length === 1 ? 'item' : 'items'} selected to compare (max 3)
+            </span>
+          </div>
+          <div className="compare-bar-actions">
+            <button className="compare-bar-clear" onClick={() => setCompareProducts([])}>Clear</button>
+            <button 
+              className="compare-bar-btn" 
+              onClick={() => setIsCompareModalOpen(true)}
+              disabled={compareProducts.length < 2}
+              title={compareProducts.length < 2 ? "Select at least 2 products to compare" : "Compare selected products"}
+            >
+              Compare {compareProducts.length > 1 ? `(${compareProducts.length})` : ''}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Compare Modal Overlay */}
+      {isCompareModalOpen && (
+        <CompareModal 
+          products={compareProducts} 
+          onClose={() => setIsCompareModalOpen(false)} 
+        />
+      )}
     </>
   );
 }
@@ -368,7 +445,7 @@ export default function Home() {
 /* ─────────────────────────────────────────────
    MESSAGE RENDERER
 ───────────────────────────────────────────── */
-function MessageRenderer({ msg, onFollowUp }) {
+function MessageRenderer({ msg, onFollowUp, compareProducts = [], onCompareToggle }) {
   if (msg.role === 'user') {
     return (
       <div className="message-wrapper user">
@@ -399,14 +476,32 @@ function MessageRenderer({ msg, onFollowUp }) {
         <div className="msg-avatar bot">🤖</div>
         <div className="msg-body" style={{ maxWidth: '100%', width: '100%' }}>
 
+          {/* Follow-up context banner */}
+          {msg.isFollowUp && msg.contextSummary && (
+            <div className="followup-context-banner">
+              <span>🔗</span>
+              <span>{msg.contextSummary}</span>
+            </div>
+          )}
+
+          {/* Gemini API Warning Callout */}
+          {msg.geminiError && (
+            <div className="gemini-error-banner">
+              <span>⚠️</span>
+              <span>Gemini API authorization failed. Running in offline context-resolver mode.</span>
+            </div>
+          )}
+
           {/* AI Summary */}
           {(msg.summary || msg.recommendation) && (
             <div className="ai-summary">
               <div className="ai-summary-header">
                 ✦ AI Analysis
-                {msg.searchQuery && (
+                {msg.resolvedQuery && msg.isFollowUp ? (
+                  <span className="search-tag">🔗 "{msg.resolvedQuery}"</span>
+                ) : msg.searchQuery ? (
                   <span className="search-tag">🔍 "{msg.searchQuery}"</span>
-                )}
+                ) : null}
               </div>
               {msg.summary && <p>{msg.summary}</p>}
               {msg.recommendation && (
@@ -466,7 +561,13 @@ function MessageRenderer({ msg, onFollowUp }) {
               </div>
               <div className="products-grid">
                 {msg.products.map((p, i) => (
-                  <ProductCard key={i} product={p} index={i} />
+                  <ProductCard 
+                    key={i} 
+                    product={p} 
+                    index={i} 
+                    isComparing={compareProducts.some(cp => cp.title === p.title && cp.price === p.price)}
+                    onCompareToggle={onCompareToggle}
+                  />
                 ))}
               </div>
             </div>

@@ -60,12 +60,18 @@ Be concise, helpful, and conversational. Keep responses under 150 words unless a
 
   } catch (error) {
     console.error('Chat route error:', error);
+    const errText = error.message || '';
+    if (errText.includes('401') || errText.includes('Unauthorized') || errText.includes('auth') || errText.includes('credentials')) {
+      return Response.json({
+        reply: "⚠️ **Gemini API key authorization failed.** Please replace the `GEMINI_API_KEY` in your `.env.local` or `lib/config.js` with a valid key from Google AI Studio (starting with `AIzaSy`).",
+      });
+    }
     // Friendly quota message
-    if (error.message?.includes('429') || error.message?.includes('quota')) {
+    if (errText.includes('429') || errText.includes('quota')) {
       return Response.json({
         reply: "⚠️ I'm experiencing high demand right now (API quota reached). Please wait a moment and try again, or try searching for a product — search results will still appear!",
       });
     }
-    return Response.json({ error: 'Failed to get a response. ' + error.message }, { status: 500 });
+    return Response.json({ reply: '⚠️ Failed to get a response: ' + errText });
   }
 }

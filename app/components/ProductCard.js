@@ -1,6 +1,6 @@
 'use client';
 
-export default function ProductCard({ product, index }) {
+export default function ProductCard({ product, index, onCompareToggle, isComparing }) {
   const getBadge = () => {
     if (product.badge === 'top')    return { label: '🏆 Top Pick',    cls: 'badge-top' };
     if (product.badge === 'value')  return { label: '💎 Best Value',  cls: 'badge-value' };
@@ -35,7 +35,7 @@ export default function ProductCard({ product, index }) {
 
   return (
     <div
-      className={`product-card ${productUrl ? 'product-card-clickable' : ''}`}
+      className={`product-card ${productUrl ? 'product-card-clickable' : ''} ${isComparing ? 'product-card-comparing' : ''}`}
       onClick={handleCardClick}
       role={productUrl ? 'link' : undefined}
       tabIndex={productUrl ? 0 : undefined}
@@ -66,7 +66,21 @@ export default function ProductCard({ product, index }) {
 
       {/* Card body */}
       <div className="product-info">
-        {product.source && <div className="product-store">{product.source}</div>}
+        <div className="product-card-meta-row">
+          {product.source && <div className="product-store">{product.source}</div>}
+          {onCompareToggle && (
+            <button
+              className={`card-compare-btn ${isComparing ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onCompareToggle(product);
+              }}
+              aria-label={isComparing ? "Remove from comparison" : "Add to comparison"}
+            >
+              {isComparing ? '✓ Selected' : '⚖️ Compare'}
+            </button>
+          )}
+        </div>
 
         <div className="product-name">{product.title}</div>
 
