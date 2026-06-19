@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const gemini_key = process.env.GEMINI_API_KEY;
+const genAI = new GoogleGenerativeAI(gemini_key);
 
 const MODEL_CHAIN = [
   'gemini-2.0-flash-lite',
@@ -37,7 +37,7 @@ export async function POST(request) {
       return Response.json({ error: 'Message is required.' }, { status: 400 });
     }
 
-    if (!process.env.GEMINI_API_KEY) {
+    if (!gemini_key) {
       return Response.json({ error: 'Gemini API key not configured.' }, { status: 500 });
     }
 

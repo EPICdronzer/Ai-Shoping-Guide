@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+const gemini_key = process.env.GEMINI_API_KEY;
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const genAI = new GoogleGenerativeAI(gemini_key);
 
 // Smart predefined suggestions by keyword
 const SUGGESTION_MAP = {
@@ -95,7 +96,7 @@ export async function POST(request) {
     const trimmed = query.trim();
 
     // Try AI suggestions first (fast & short prompt)
-    if (process.env.GEMINI_API_KEY) {
+    if (gemini_key) {
       try {
         const MODEL_CHAIN = ['gemini-2.0-flash-lite', 'gemini-1.5-flash-8b', 'gemini-2.0-flash'];
         for (const modelName of MODEL_CHAIN) {

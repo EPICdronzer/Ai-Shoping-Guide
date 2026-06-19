@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import axios from 'axios';
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const gemini_key = process.env.GEMINI_API_KEY;
+const genAI = new GoogleGenerativeAI(gemini_key);
 
 const MODEL_CHAIN = [
   'gemini-2.0-flash-lite',
@@ -26,7 +26,7 @@ async function generateWithFallback(prompt) {
   }
   throw lastError;
 }
-
+const serpapi_key = process.env.SERPAPI_KEY;
 // SINGLE SerpAPI call — only Google Shopping
 async function searchGoogleShopping(query) {
   try {
@@ -34,7 +34,7 @@ async function searchGoogleShopping(query) {
       params: {
         engine: 'google_shopping',
         q: query,
-        api_key: process.env.SERPAPI_KEY,
+        api_key: serpapi_key,
         gl: 'in',
         hl: 'en',
         num: 10,
@@ -62,10 +62,10 @@ export async function POST(request) {
     if (!query?.trim()) {
       return Response.json({ error: 'Please provide a search query.' }, { status: 400 });
     }
-    if (!process.env.GEMINI_API_KEY) {
+    if (!gemini_key) {
       return Response.json({ error: 'GEMINI_API_KEY not set in .env.local' }, { status: 500 });
     }
-    if (!process.env.SERPAPI_KEY) {
+    if (!serpapi_key) {
       return Response.json({ error: 'SERPAPI_KEY not set in .env.local' }, { status: 500 });
     }
 
