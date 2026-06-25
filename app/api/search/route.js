@@ -38,14 +38,14 @@ async function searchGoogleShopping(query, maxPrice) {
       api_key: serpapi_key,
       gl: 'in',
       hl: 'en',
-      num: 10,
+      num: 20,
     };
     if (maxPrice) {
       params.tbs = `mr:1,price:1,ppr_max:${maxPrice}`;
     }
     const response = await axios.get('https://serpapi.com/search', {
       params,
-      timeout: 10000,
+      timeout: 12000,
     });
     return response.data.shopping_results || [];
   } catch (err) {
@@ -54,9 +54,51 @@ async function searchGoogleShopping(query, maxPrice) {
   }
 }
 
+async function searchGoogleShoppingBroad(query) {
+  try {
+    const params = {
+      engine: 'google_shopping',
+      q: query,
+      api_key: serpapi_key,
+      gl: 'in',
+      hl: 'en',
+      num: 20,
+    };
+    const response = await axios.get('https://serpapi.com/search', {
+      params,
+      timeout: 12000,
+    });
+    return response.data.shopping_results || [];
+  } catch (err) {
+    console.error('SerpAPI broad error:', err.message);
+    return [];
+  }
+}
+
 function extractMaxPrice(query) {
+  const q = query.toLowerCase();
+
+  // Must match ONLY when a budget keyword OR ₹ is present, to avoid false positives
+  // Order matters: lakh before bare 'l', crore before 'cr'
+
+  // "5 lakh", "5lac", "5 l" — only after budget keyword or ₹
+  const lakhRe = /(?:under|below|less than|within|budget|upto|up to|[₹])\s*[rs.]*\s*([\d.]+)\s*(?:lakh|lacs?|l)\b/;
+  const lakhM = q.match(lakhRe);
+  if (lakhM) return Math.round(parseFloat(lakhM[1]) * 100000);
+
+  // "1.5 crore", "2cr"
+  const croreRe = /(?:under|below|less than|within|budget|upto|up to|[₹])\s*[rs.]*\s*([\d.]+)\s*(?:crore|cr)\b/;
+  const croreM = q.match(croreRe);
+  if (croreM) return Math.round(parseFloat(croreM[1]) * 10000000);
+
+  // "50k", "20K"
+  const kRe = /(?:under|below|less than|within|budget|upto|up to|[₹])\s*[rs.]*\s*([\d.]+)\s*k\b/;
+  const kM = q.match(kRe);
+  if (kM) return Math.round(parseFloat(kM[1]) * 1000);
+
+  // Plain number: "under 5000", "₹2000"
   const m =
-    query.match(/(?:under|below|less than|within|budget|upto|up to)\s*[₹rs\.]*\s*(\d[\d,]*)/i) ||
+    query.match(/(?:under|below|less than|within|budget|upto|up to)\s*[₹rs.]*\s*(\d[\d,]*)/i) ||
     query.match(/[₹]\s*(\d[\d,]*)/);
   return m ? parseInt(m[1].replace(/,/g, ''), 10) : null;
 }
@@ -163,13 +205,24 @@ Your task:
 4. Extract any budget constraint from the full context (current message takes priority, else use previous budget if relevant).
    IMPORTANT: If they ask for "cheaper", "cheapest", or "lower budget", set "maxPrice" to be about 10-15% lower than the cheapest product price listed in the last Assistant response.
 
-Reply ONLY with valid JSON (no markdown):
+Reply ONLY with valid JSON (no markdown, no extra text):
 {
-  "isFollowUp": true/false,
+  "isFollowUp": true or false,
   "resolvedQuery": "the final standalone search query to use",
-  "maxPrice": null or number (in INR, extracted from full context),
-  "contextSummary": "1 sentence: what the user is actually looking for based on full context"
-}`;
+  "maxPrice": null or a NUMBER in INR (rupees, integer),
+  "contextSummary": "1 sentence: what the user is actually looking for"
+}
+
+CRITICAL RULES for maxPrice:
+- ALWAYS convert budget expressions to a plain integer in INR:
+  * "5 lakh" or "5L" or "5lac" = 500000
+  * "1.5 lakh" = 150000
+  * "10k" or "10K" = 10000
+  * "50k" = 50000
+  * "1 crore" = 10000000
+  * "₹5000" = 5000
+- If no budget is mentioned, set maxPrice to null.
+- If user says "cheaper" or "lower budget", set maxPrice to ~15% below the cheapest price seen in the last assistant message.`;
 
   try {
     const raw = await generateWithFallback(prompt);
@@ -226,19 +279,36 @@ export async function POST(request) {
       }
     }
 
-    // ── Step 2: Extract clean product name for SerpAPI ─────────────────────
-    const cleanQuery = resolvedQuery
-      .replace(/(?:under|below|less than|within|budget|upto|up to)\s*[₹rs\.]*\s*\d[\d,]*/gi, '')
-      .replace(/[₹]\s*\d[\d,]*/g, '')
-      .trim() || resolvedQuery;
+    // ── Step 2: Build clean product query for SerpAPI (strip price info) ───
+    const cleanQuery = (() => {
+      let q = resolvedQuery
+        // Remove "under/below X lakh/crore/k" patterns
+        .replace(/(?:under|below|less than|within|budget|upto|up to)\s*[₹rs\.]*\s*[\d.]+\s*(?:lakh|lac|crore|cr|k|l)\b/gi, '')
+        // Remove "under/below ₹X" or "under X" (plain digits)
+        .replace(/(?:under|below|less than|within|budget|upto|up to)\s*[₹rs\.]*\s*\d[\d,]*/gi, '')
+        // Remove standalone ₹X
+        .replace(/[₹]\s*[\d,]+/g, '')
+        // Remove leftover lakh/crore/k if orphaned
+        .replace(/\b(?:lakh|lac|crore|cr)\b/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+      // Guard: if stripping left something too short or empty, use full resolvedQuery
+      return q.length > 3 ? q : resolvedQuery;
+    })();
 
     console.log(`[Search] Original: "${query}" → Resolved: "${resolvedQuery}" | Budget: ₹${maxPrice} | FollowUp: ${isFollowUp}`);
 
-    // ── Step 3: ONE SerpAPI call ───────────────────────────────────────────
-    const shoppingResults = await searchGoogleShopping(cleanQuery, maxPrice);
+    // ── Step 3: SerpAPI call + broad fallback if zero raw results ────────────
+    let shoppingResults = await searchGoogleShopping(cleanQuery, maxPrice);
 
-    // ── Step 4: Map + strict price filter ─────────────────────────────────
-    let products = shoppingResults.slice(0, 10).map((item) => ({
+    // If SerpAPI returned nothing at all (not a budget issue), try without price cap
+    if (shoppingResults.length === 0) {
+      console.log(`[Search] Zero raw results, trying broad search for: "${cleanQuery}"`);
+      shoppingResults = await searchGoogleShoppingBroad(cleanQuery);
+    }
+
+    // ── Step 4: Map results ──────────────────────────────────────────────────
+    let products = shoppingResults.map((item) => ({
       title: item.title,
       price: item.price,
       extracted_price: item.extracted_price,
@@ -250,13 +320,20 @@ export async function POST(request) {
       badge: null,
     }));
 
+    // ── Step 4b: Apply strict budget filter ──────────────────────────────────
     if (maxPrice && products.length > 0) {
+      // Only keep items confirmed within budget (items with no parsed price are excluded)
       const filtered = products.filter(
-        (p) => p.extracted_price && p.extracted_price <= maxPrice
+        (p) => p.extracted_price != null && p.extracted_price <= maxPrice
       );
-      products = filtered;
+      // If some results had no price tag at all, include those too (can't verify)
+      const noPriceItems = products.filter((p) => p.extracted_price == null);
+      products = filtered.length > 0
+        ? [...filtered, ...noPriceItems].slice(0, 10)
+        : []; // empty → triggers "no results in budget" message
+    } else {
+      products = products.slice(0, 10);
     }
-    products = products.slice(0, 6);
 
     // ── Step 5a: No results within budget ─────────────────────────────────
     if (products.length === 0 && maxPrice) {

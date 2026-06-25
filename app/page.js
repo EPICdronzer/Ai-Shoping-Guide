@@ -484,13 +484,7 @@ function MessageRenderer({ msg, onFollowUp, compareProducts = [], onCompareToggl
             </div>
           )}
 
-          {/* Gemini API Warning Callout */}
-          {msg.geminiError && (
-            <div className="gemini-error-banner">
-              <span>⚠️</span>
-              <span>Gemini API authorization failed. Running in offline context-resolver mode.</span>
-            </div>
-          )}
+
 
           {/* AI Summary */}
           {(msg.summary || msg.recommendation) && (
