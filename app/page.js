@@ -26,6 +26,86 @@ function renderMarkdown(text) {
     .replace(/\n/g, '<br/>');
 }
 
+/* ─────────────────────────────────────────────
+   CLARIFY CARD — multi-question chip selector
+───────────────────────────────────────────── */
+function ClarifyCard({ originalQuery, questions, onSearch }) {
+  const [answers, setAnswers] = useState({});
+
+  const pick = (qId, chip) => {
+    setAnswers(prev => ({ ...prev, [qId]: chip }));
+  };
+
+  const composeQuery = () => {
+    // Build refined query: original + answers in logical order
+    const budget = answers.budget && answers.budget !== 'No limit' ? answers.budget : '';
+    const usecase = answers.usecase || '';
+    const brand = answers.brand && answers.brand !== 'No preference' ? answers.brand : '';
+    const parts = [originalQuery, usecase, brand, budget].filter(Boolean);
+    return parts.join(' ').replace(/\s{2,}/g, ' ').trim();
+  };
+
+  const readyToSearch = questions.length === 0 || Object.keys(answers).length > 0;
+
+  return (
+    <div className="clarify-card">
+      <div className="clarify-card-header">
+        <span className="clarify-icon">🎯</span>
+        <div>
+          <div className="clarify-title">Help me find exactly what you need</div>
+          <div className="clarify-subtitle">You searched for <strong>"{originalQuery}"</strong> — answer a few quick questions for better results</div>
+        </div>
+      </div>
+
+      <div className="clarify-questions">
+        {questions.map((q) => (
+          <div key={q.id} className="clarify-question-block">
+            <div className="clarify-question-label">
+              {q.id === 'budget' ? '💰' : q.id === 'usecase' ? '🎯' : '🏷️'}
+              {q.question}
+            </div>
+            <div className="clarify-chips-row">
+              {q.chips.map((chip) => (
+                <button
+                  key={chip}
+                  className={`clarify-chip ${answers[q.id] === chip ? 'selected' : ''}`}
+                  onClick={() => pick(q.id, chip)}
+                >
+                  {answers[q.id] === chip && <span className="clarify-check">✓ </span>}
+                  {chip}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="clarify-footer">
+        {readyToSearch && (
+          <div className="clarify-preview">
+            🔍 Will search: <strong>"{composeQuery()}"</strong>
+          </div>
+        )}
+        <div className="clarify-actions">
+          <button
+            className="clarify-skip-btn"
+            onClick={() => onSearch(originalQuery)}
+          >
+            Skip — search as-is
+          </button>
+          <button
+            className="clarify-search-btn"
+            onClick={() => onSearch(composeQuery())}
+            disabled={!readyToSearch}
+          >
+            Search →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function highlightMatch(text, query) {
   if (!query) return text;
   const idx = text.toLowerCase().indexOf(query.toLowerCase());
@@ -165,6 +245,27 @@ export default function Home() {
 
         if (!res.ok || data.error) {
           addMessage({ role: 'bot', type: 'error', content: data.error || 'Something went wrong.' });
+        } else if (data.needsClarification) {
+          // Query is vague — ask clarifying questions before searching
+          addMessage({
+            role: 'bot',
+            type: 'clarify',
+            originalQuery: data.originalQuery || trimmed,
+            questions: data.questions || [],
+          });
+          // Keep chatHistory intact so context is preserved when user answers
+          setChatHistory(newHistory);
+        } else if (data.needsBudgetClarification) {
+          // Bot needs the user to specify a budget for cheaper search
+          addMessage({
+            role: 'bot',
+            type: 'clarification',
+            content: data.clarificationMessage,
+            resolvedQuery: data.resolvedQuery,
+            isFollowUp: true,
+          });
+          // Keep history unchanged so next query still has context
+          setChatHistory(newHistory);
         } else {
           addMessage({
             role: 'bot',
@@ -464,6 +565,55 @@ function MessageRenderer({ msg, onFollowUp, compareProducts = [], onCompareToggl
         <div className="msg-avatar bot">🤖</div>
         <div className="msg-body">
           <div className="error-bubble">⚠️ {msg.content}</div>
+          <div className="msg-time">{formatTime(msg.time)}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (msg.type === 'clarify') {
+    return (
+      <div className="message-wrapper">
+        <div className="msg-avatar bot">🤖</div>
+        <div className="msg-body">
+          <ClarifyCard
+            originalQuery={msg.originalQuery}
+            questions={msg.questions || []}
+            onSearch={onFollowUp}
+          />
+          <div className="msg-time">{formatTime(msg.time)}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (msg.type === 'clarification') {
+    // Budget clarification needed — show a polished prompt with quick-pick chips
+    const budgetChips = ['under ₹300', 'under ₹500', 'under ₹800', 'under ₹1000', 'under ₹2000'];
+    return (
+      <div className="message-wrapper">
+        <div className="msg-avatar bot">🤖</div>
+        <div className="msg-body">
+          <div className="clarification-card">
+            <div className="clarification-header">
+              <span>💰</span>
+              <span>Budget Needed</span>
+            </div>
+            <p className="clarification-text"
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
+            />
+            <div className="clarification-chips">
+              {budgetChips.map((chip, i) => (
+                <button
+                  key={i}
+                  className="clarification-chip"
+                  onClick={() => onFollowUp(chip)}
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="msg-time">{formatTime(msg.time)}</div>
         </div>
       </div>

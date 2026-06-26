@@ -110,14 +110,26 @@ function findCheapestProductPriceFromHistory(history) {
     if (h.role === 'assistant' && h.content) {
       const matches = h.content.match(/(?:₹|rs\.?)\s*(\d[\d,]*)/gi);
       if (matches) {
-        const prices = matches.map(m => {
-          const val = parseInt(m.replace(/[^\d]/g, ''), 10);
-          return val;
-        }).filter(p => p > 5000); // Exclude accessories/outliers
+        const prices = matches
+          .map(m => parseInt(m.replace(/[^\d]/g, ''), 10))
+          .filter(p => p >= 50); // Only exclude noise (ratings, counts < 50)
         if (prices.length > 0) {
           return Math.min(...prices);
         }
       }
+    }
+  }
+  return null;
+}
+
+// Find max price ceiling from original query in history
+function findOriginalMaxPriceFromHistory(history) {
+  if (!history || history.length === 0) return null;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const h = history[i];
+    if (h.role === 'user') {
+      const price = extractMaxPrice(h.content);
+      if (price) return price;
     }
   }
   return null;
@@ -152,10 +164,27 @@ function fallbackResolveQuery(currentQuery, history) {
           if (isCheaperRequested) {
             resolved = `budget ${resolved}`;
             const cheapestPrevPrice = findCheapestProductPriceFromHistory(history);
+            const originalBudget = maxPrice || findOriginalMaxPriceFromHistory(history);
             if (cheapestPrevPrice) {
-              // Lower the budget ceiling strictly to 10% below the cheapest item found last time
-              maxPrice = Math.floor((cheapestPrevPrice * 0.9) / 1000) * 1000;
+              // Use 10% below cheapest found item as new ceiling (don't round down to 0 for small prices)
+              const rawCeiling = cheapestPrevPrice * 0.9;
+              maxPrice = rawCeiling >= 1000
+                ? Math.floor(rawCeiling / 100) * 100   // round to nearest ₹100
+                : Math.floor(rawCeiling / 10) * 10;     // round to nearest ₹10 for small values
               console.log(`[Search Fallback] 'Cheaper' request. Cheapest last item: ₹${cheapestPrevPrice} → new ceiling: ₹${maxPrice}`);
+            } else if (originalBudget) {
+              // No prior products found but we know the original budget — go 30% lower
+              maxPrice = Math.floor(originalBudget * 0.7);
+              console.log(`[Search Fallback] 'Cheaper' request. No prev products. Original budget ₹${originalBudget} → new ceiling: ₹${maxPrice}`);
+            } else {
+              // No price context at all — signal caller to ask user for budget
+              return {
+                isFollowUp: true,
+                resolvedQuery: resolved,
+                maxPrice: null,
+                needsBudgetClarification: true,
+                contextSummary: `Applying "${currentQuery}" to your last search: "${h.content}"`
+              };
             }
           } else if (lower.includes('top-rated') || lower.includes('top rated') || lower.includes('best')) {
             resolved = `best ${resolved}`;
@@ -176,6 +205,155 @@ function fallbackResolveQuery(currentQuery, history) {
     }
   }
   return null;
+}
+
+// ── Clarification helpers ─────────────────────────────────────────────────
+
+/**
+ * Rule-based check: is the query too vague to search well?
+ * Returns an object with questions+chips if clarification needed, else null.
+ */
+function fallbackClarifyCheck(query, history) {
+  const q = query.toLowerCase().trim();
+
+  // Skip if it looks like a follow-up to existing history
+  const followUpTerms = ['cheaper', 'alternative', 'compare', 'top rated', 'best one', 'similar', 'show more', 'other'];
+  if (history.length > 0 && followUpTerms.some(t => q.includes(t))) return null;
+
+  // Skip if query already has budget info
+  if (extractMaxPrice(query)) return null;
+
+  // Skip if it's already detailed (has 4+ words with a descriptor)
+  const words = q.split(/\s+/).filter(Boolean);
+  const descriptors = ['waterproof','wireless','gaming','running','casual','budget','best','top','premium',
+    'cheap','affordable','latest','new','old','refurbished','used','secondhand','portable',
+    'office','student','sports','outdoor','indoor','heavy','light','fast','quiet','loud'];
+  const hasDescriptor = descriptors.some(d => q.includes(d));
+  if (words.length >= 4 && hasDescriptor) return null;
+  if (words.length >= 5) return null; // Long query → probably specific enough
+
+  // ── Vague single-category patterns ────────────────────────────────────────
+  const CLARIFY_MAP = {
+    // Footwear
+    shoe:     { use: ['Running', 'Casual wear', 'Trekking', 'Sports', 'Formal'],    brand: ['No preference', 'Nike', 'Adidas', 'Puma', 'Asian', 'Skechers'] },
+    shoes:    { use: ['Running', 'Casual wear', 'Trekking', 'Sports', 'Formal'],    brand: ['No preference', 'Nike', 'Adidas', 'Puma', 'Asian', 'Skechers'] },
+    sneaker:  { use: ['Everyday wear', 'Running', 'Sports', 'Gym'],                 brand: ['No preference', 'Nike', 'Adidas', 'Puma', 'Reebok'] },
+    sneakers: { use: ['Everyday wear', 'Running', 'Sports', 'Gym'],                 brand: ['No preference', 'Nike', 'Adidas', 'Puma', 'Reebok'] },
+    sandal:   { use: ['Daily wear', 'Formal', 'Sports', 'Beach'],                   brand: ['No preference', 'Bata', 'Paragon', 'Crocs', 'Adidas'] },
+    sandals:  { use: ['Daily wear', 'Formal', 'Sports', 'Beach'],                   brand: ['No preference', 'Bata', 'Paragon', 'Crocs', 'Adidas'] },
+    boot:     { use: ['Work/Safety', 'Trekking', 'Casual', 'Rain'],                 brand: ['No preference', 'Red Chief', 'Woodland', 'Lee Cooper'] },
+    boots:    { use: ['Work/Safety', 'Trekking', 'Casual', 'Rain'],                 brand: ['No preference', 'Red Chief', 'Woodland', 'Lee Cooper'] },
+    // Electronics
+    laptop:   { use: ['Gaming', 'Office/Work', 'Student', 'Video editing', 'General use'], brand: ['No preference', 'HP', 'Dell', 'Lenovo', 'ASUS', 'Acer'] },
+    phone:    { use: ['Photography', 'Gaming', 'Battery life', 'Daily use'],        brand: ['No preference', 'Samsung', 'OnePlus', 'Redmi', 'Realme', 'Vivo'] },
+    mobile:   { use: ['Photography', 'Gaming', 'Battery life', 'Daily use'],        brand: ['No preference', 'Samsung', 'OnePlus', 'Redmi', 'Realme', 'Vivo'] },
+    smartphone: { use: ['Photography', 'Gaming', 'Battery life', 'Daily use'],      brand: ['No preference', 'Samsung', 'OnePlus', 'Redmi', 'Realme', 'iQOO'] },
+    headphone:  { use: ['Music', 'Gaming', 'Calls/Office', 'Gym/Sports'],           brand: ['No preference', 'Sony', 'JBL', 'boAt', 'Sennheiser', 'Noise'] },
+    headphones: { use: ['Music', 'Gaming', 'Calls/Office', 'Gym/Sports'],           brand: ['No preference', 'Sony', 'JBL', 'boAt', 'Sennheiser', 'Noise'] },
+    earphone:   { use: ['Music', 'Calls', 'Sports/Gym', 'Casual'],                  brand: ['No preference', 'boAt', 'JBL', 'Sony', 'Realme', 'Noise'] },
+    earphones:  { use: ['Music', 'Calls', 'Sports/Gym', 'Casual'],                  brand: ['No preference', 'boAt', 'JBL', 'Sony', 'Realme', 'Noise'] },
+    watch:      { use: ['Fitness/Health', 'Fashion', 'Smartwatch', 'Analog'],       brand: ['No preference', 'Noise', 'Fire-Boltt', 'Fastrack', 'Fossil', 'Apple'] },
+    tablet:     { use: ['Kids', 'Study', 'Entertainment', 'Work'],                  brand: ['No preference', 'Samsung', 'Lenovo', 'Realme', 'Apple (iPad)'] },
+    camera:     { use: ['Photography beginner', 'DSLR', 'Vlogging', 'Action cam'], brand: ['No preference', 'Canon', 'Nikon', 'Sony', 'GoPro'] },
+    tv:         { use: ['Streaming', 'Gaming', 'Sports', 'Bedroom/Living room'],    brand: ['No preference', 'Samsung', 'LG', 'Sony', 'Mi/Redmi', 'TCL'] },
+    keyboard:   { use: ['Gaming', 'Office/Typing', 'Programming'],                  brand: ['No preference', 'Logitech', 'HP', 'HyperX', 'Zebronics', 'Redragon'] },
+    mouse:      { use: ['Gaming', 'Office', 'Design/Graphics'],                     brand: ['No preference', 'Logitech', 'HP', 'Razer', 'Zebronics'] },
+    monitor:    { use: ['Gaming', 'Office', 'Design/Editing', 'General use'],       brand: ['No preference', 'LG', 'Dell', 'Samsung', 'ASUS', 'AOC'] },
+    // Home & Appliances
+    bag:        { use: ['School/College', 'Travel', 'Gym', 'Office', 'Trekking'],   brand: ['No preference', 'Safari', 'Wildcraft', 'American Tourister', 'Skybags'] },
+    backpack:   { use: ['School/College', 'Travel', 'Hiking', 'Laptop'],            brand: ['No preference', 'Wildcraft', 'Decathlon', 'American Tourister'] },
+    shirt:      { use: ['Formal', 'Casual', 'Sports/Gym', 'Party'],                 brand: ['No preference', 'Allen Solly', 'Peter England', 'Van Heusen', 'Raymond'] },
+    jeans:      { use: ['Casual', 'Formal', 'Slim fit', 'Regular fit'],             brand: ['No preference', 'Levi\'s', 'Lee', 'Pepe', 'Spykar', 'Wrangler'] },
+    jacket:     { use: ['Winter', 'Casual', 'Rain/Windproof', 'Sports'],            brand: ['No preference', 'Columbia', 'Decathlon', 'Wildcraft', 'H&M'] },
+  };
+
+  // Find matching category
+  const matchedKey = Object.keys(CLARIFY_MAP).find(k => q === k || q.startsWith(k + ' ') || q.endsWith(' ' + k));
+  if (!matchedKey) return null;
+
+  const categoryData = CLARIFY_MAP[matchedKey];
+  const budgetChips = ['under ₹500', 'under ₹1000', 'under ₹2000', 'under ₹5000', 'under ₹10000', 'No limit'];
+
+  return {
+    needsClarification: true,
+    originalQuery: query,
+    questions: [
+      {
+        id: 'budget',
+        question: 'What\'s your budget?',
+        chips: budgetChips,
+      },
+      {
+        id: 'usecase',
+        question: 'What will you use it for?',
+        chips: categoryData.use,
+      },
+      {
+        id: 'brand',
+        question: 'Any brand preference?',
+        chips: categoryData.brand,
+      },
+    ],
+  };
+}
+
+/**
+ * Gemini-powered clarification check for queries not caught by the rule-based fallback.
+ */
+async function checkIfNeedsClarification(query) {
+  const prompt = `You are ShopMind AI, an Indian shopping assistant.
+
+A user wants to search for: "${query}"
+
+Decide: is this query specific enough to return useful search results, or is it too vague?
+
+A query is SPECIFIC ENOUGH if it has ANY TWO of: product type + use-case/descriptor + budget.
+Examples of SPECIFIC ENOUGH: "waterproof running shoes under ₹3000", "gaming laptop under ₹60000", "wireless earphones for gym".
+Examples of TOO VAGUE: "shoes", "laptop", "phone", "something for my mom", "bag".
+
+If the query is already specific enough, return: { "needsClarification": false }
+
+If it IS too vague, return 2-3 focused questions that would make the search much better.
+Each question must have 4-6 short chip options suited to Indian market users.
+
+Reply ONLY with valid JSON (no markdown):
+{
+  "needsClarification": true or false,
+  "originalQuery": "${query}",
+  "questions": [
+    {
+      "id": "budget",
+      "question": "What's your budget?",
+      "chips": ["under ₹500", "under ₹1000", "under ₹2000", "under ₹5000", "under ₹10000", "No limit"]
+    },
+    {
+      "id": "usecase",
+      "question": "What will you use it for?",
+      "chips": ["Option A", "Option B", "Option C", "Option D"]
+    },
+    {
+      "id": "brand",
+      "question": "Any brand preference?",
+      "chips": ["No preference", "Brand A", "Brand B", "Brand C", "Brand D"]
+    }
+  ]
+}
+
+RULES:
+- Always include a "budget" question as the FIRST question if query has no price.
+- Max 3 questions total.
+- Chips should be short (1-4 words).
+- Tailor use-case + brand chips to the SPECIFIC product (e.g. shoes → Running/Casual/Trekking, not generic options).
+- If needsClarification is false, questions array can be empty [].`;
+
+  try {
+    const raw = await generateWithFallback(prompt);
+    const cleaned = raw.trim().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    return JSON.parse(cleaned);
+  } catch (err) {
+    console.warn('Clarification check failed:', err.message?.slice(0, 60));
+    return null;
+  }
 }
 
 /**
@@ -203,13 +381,14 @@ Your task:
 2. If it IS a follow-up, resolve it into a STANDALONE, specific search query that captures full context (product category, budget if mentioned, preferences).
 3. If it is NOT a follow-up (it's a completely new search), just return the original query.
 4. Extract any budget constraint from the full context (current message takes priority, else use previous budget if relevant).
-   IMPORTANT: If they ask for "cheaper", "cheapest", or "lower budget", set "maxPrice" to be about 10-15% lower than the cheapest product price listed in the last Assistant response.
+   IMPORTANT: If they ask for "cheaper", "cheapest", or "lower budget", look at ALL product prices in the last Assistant message (e.g. ₹699, ₹875, ₹470) and set "maxPrice" to 15% below the LOWEST price found. For example, if cheapest was ₹470, set maxPrice = Math.floor(470 * 0.85) = 399.
 
 Reply ONLY with valid JSON (no markdown, no extra text):
 {
   "isFollowUp": true or false,
   "resolvedQuery": "the final standalone search query to use",
   "maxPrice": null or a NUMBER in INR (rupees, integer),
+  "needsBudgetClarification": true or false,
   "contextSummary": "1 sentence: what the user is actually looking for"
 }
 
@@ -221,8 +400,9 @@ CRITICAL RULES for maxPrice:
   * "50k" = 50000
   * "1 crore" = 10000000
   * "₹5000" = 5000
-- If no budget is mentioned, set maxPrice to null.
-- If user says "cheaper" or "lower budget", set maxPrice to ~15% below the cheapest price seen in the last assistant message.`;
+- If no budget is mentioned AND no products were shown previously, set needsBudgetClarification = true and maxPrice = null.
+- If user says "cheaper" or "lower budget", find the LOWEST price in the last assistant message products list, then set maxPrice = floor(lowestPrice * 0.85).
+- NEVER set maxPrice higher than the lowest price shown in prior results when user says cheaper.`;
 
   try {
     const raw = await generateWithFallback(prompt);
@@ -248,7 +428,34 @@ export async function POST(request) {
       return Response.json({ error: 'SERPAPI_KEY not set in .env.local' }, { status: 500 });
     }
 
+    // ── Step 0: Clarification check — is the query specific enough? ────────
+    // Only for fresh queries (not follow-ups to existing history)
+    const looksLikeFollowUp = history.length > 0 && (() => {
+      const lower = query.toLowerCase();
+      const fuTerms = ['cheaper', 'alternative', 'compare', 'top rated', 'top-rated', 'similar',
+        'show more', 'other option', 'best one', 'find better', 'show only'];
+      return fuTerms.some(t => lower.includes(t));
+    })();
+
+    if (!looksLikeFollowUp) {
+      // Try rule-based first (fast, no API call)
+      let clarifyResult = fallbackClarifyCheck(query, history);
+      // If rule map didn't match, ask Gemini for complex/unknown queries
+      if (!clarifyResult) {
+        clarifyResult = await checkIfNeedsClarification(query);
+      }
+      if (clarifyResult?.needsClarification && clarifyResult.questions?.length > 0) {
+        console.log(`[Clarify] Query "${query}" needs clarification.`);
+        return Response.json({
+          needsClarification: true,
+          originalQuery: clarifyResult.originalQuery || query,
+          questions: clarifyResult.questions,
+        });
+      }
+    }
+
     // ── Step 1: Resolve query using full conversation context ──────────────
+
     let resolvedQuery = query;
     let maxPrice = extractMaxPrice(query);
     let contextSummary = null;
@@ -265,6 +472,23 @@ export async function POST(request) {
         if (!maxPrice && resolution.maxPrice) {
           maxPrice = resolution.maxPrice;
         }
+        // If AI signals it needs budget clarification, ask user
+        if (resolution.needsBudgetClarification) {
+          return Response.json({
+            products: [],
+            summary: null,
+            recommendation: null,
+            alternatives: [],
+            followUpSuggestions: [],
+            noResultsMessage: null,
+            needsBudgetClarification: true,
+            clarificationMessage: `To find cheaper options for **${(resolution.resolvedQuery || query).replace(/^budget\s*/i, '')}**, could you share your target budget? (e.g. "under ₹500" or "under ₹1000")`,
+            searchQuery: query,
+            resolvedQuery: resolution.resolvedQuery || query,
+            isFollowUp: true,
+            geminiError,
+          });
+        }
       } else {
         // Fallback rule-based parsing if Gemini fails/unauthorized
         geminiError = true;
@@ -275,6 +499,23 @@ export async function POST(request) {
           contextSummary = fallbackRes.contextSummary;
           maxPrice = fallbackRes.maxPrice || maxPrice;
           hasFallbackResolved = true;
+          // If fallback also signals budget clarification needed
+          if (fallbackRes.needsBudgetClarification) {
+            return Response.json({
+              products: [],
+              summary: null,
+              recommendation: null,
+              alternatives: [],
+              followUpSuggestions: [],
+              noResultsMessage: null,
+              needsBudgetClarification: true,
+              clarificationMessage: `To find cheaper options for **${(fallbackRes.resolvedQuery || query).replace(/^budget\s*/i, '')}**, could you share your target budget? (e.g. "under ₹500" or "under ₹1000")`,
+              searchQuery: query,
+              resolvedQuery: fallbackRes.resolvedQuery || query,
+              isFollowUp: true,
+              geminiError,
+            });
+          }
         }
       }
     }
