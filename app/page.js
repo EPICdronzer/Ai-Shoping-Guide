@@ -1,385 +1,54 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
-import ProductCard from './components/ProductCard';
-import TypingIndicator from './components/TypingIndicator';
-import SuggestionChips from './components/SuggestionChips';
-import CompareModal from './components/CompareModal';
-import { getClientSuggestions } from './lib/suggestions';
-
-const WELCOME_MSG = {
-  id: 'welcome',
-  role: 'bot',
-  type: 'text',
-  content: "👋 Hi! I'm **ShopMind AI** — your personal shopping assistant.\n\nJust describe what you're looking for, like *\"waterproof running shoes under ₹3000\"* or *\"best gaming laptop under ₹60,000\"* and I'll search the web, compare results, and give you a clean summary instantly!",
-  time: new Date(),
-};
-
-function formatTime(d) {
-  return new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-}
-
-function renderMarkdown(text) {
-  return text
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/\n/g, '<br/>');
-}
-
-/* ─────────────────────────────────────────────
-   CLARIFY CARD — multi-question chip selector
-───────────────────────────────────────────── */
-function ClarifyCard({ originalQuery, questions, onSearch }) {
-  const [answers, setAnswers] = useState({});
-
-  const pick = (qId, chip) => {
-    setAnswers(prev => ({ ...prev, [qId]: chip }));
-  };
-
-  const composeQuery = () => {
-    // Build refined query: original + answers in logical order
-    const budget = answers.budget && answers.budget !== 'No limit' ? answers.budget : '';
-    const usecase = answers.usecase || '';
-    const brand = answers.brand && answers.brand !== 'No preference' ? answers.brand : '';
-    const parts = [originalQuery, usecase, brand, budget].filter(Boolean);
-    return parts.join(' ').replace(/\s{2,}/g, ' ').trim();
-  };
-
-  const readyToSearch = questions.length === 0 || Object.keys(answers).length > 0;
-
-  return (
-    <div className="clarify-card">
-      <div className="clarify-card-header">
-        <span className="clarify-icon">🎯</span>
-        <div>
-          <div className="clarify-title">Help me find exactly what you need</div>
-          <div className="clarify-subtitle">You searched for <strong>"{originalQuery}"</strong> — answer a few quick questions for better results</div>
-        </div>
-      </div>
-
-      <div className="clarify-questions">
-        {questions.map((q) => (
-          <div key={q.id} className="clarify-question-block">
-            <div className="clarify-question-label">
-              {q.id === 'budget' ? '💰' : q.id === 'usecase' ? '🎯' : '🏷️'}
-              {q.question}
-            </div>
-            <div className="clarify-chips-row">
-              {q.chips.map((chip) => (
-                <button
-                  key={chip}
-                  className={`clarify-chip ${answers[q.id] === chip ? 'selected' : ''}`}
-                  onClick={() => pick(q.id, chip)}
-                >
-                  {answers[q.id] === chip && <span className="clarify-check">✓ </span>}
-                  {chip}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="clarify-footer">
-        {readyToSearch && (
-          <div className="clarify-preview">
-            🔍 Will search: <strong>"{composeQuery()}"</strong>
-          </div>
-        )}
-        <div className="clarify-actions">
-          <button
-            className="clarify-skip-btn"
-            onClick={() => onSearch(originalQuery)}
-          >
-            Skip — search as-is
-          </button>
-          <button
-            className="clarify-search-btn"
-            onClick={() => onSearch(composeQuery())}
-            disabled={!readyToSearch}
-          >
-            Search →
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function highlightMatch(text, query) {
-  if (!query) return text;
-  const idx = text.toLowerCase().indexOf(query.toLowerCase());
-  if (idx === -1) return text;
-  return (
-    <>
-      {text.slice(0, idx)}
-      <span className="autocomplete-match">{text.slice(idx, idx + query.length)}</span>
-      {text.slice(idx + query.length)}
-    </>
-  );
-}
-
-const SEARCH_ICONS = ['👟', '💻', '📱', '🎧', '⌚', '📷', '🖥️', '🎮', '👕', '🎒'];
-function getIcon(text) {
-  const t = text.toLowerCase();
-  if (t.includes('shoe') || t.includes('sneaker') || t.includes('boot')) return '👟';
-  if (t.includes('laptop') || t.includes('notebook')) return '💻';
-  if (t.includes('phone') || t.includes('mobile') || t.includes('iphone') || t.includes('samsung')) return '📱';
-  if (t.includes('headphone') || t.includes('earphone') || t.includes('airpod') || t.includes('earbud')) return '🎧';
-  if (t.includes('watch')) return '⌚';
-  if (t.includes('camera')) return '📷';
-  if (t.includes('tv') || t.includes('monitor') || t.includes('screen')) return '🖥️';
-  if (t.includes('gaming') || t.includes('game')) return '🎮';
-  if (t.includes('bag') || t.includes('backpack')) return '🎒';
-  if (t.includes('tablet') || t.includes('ipad')) return '📟';
-  return '🔍';
-}
-
-export default function Home() {
-  const [messages, setMessages] = useState([WELCOME_MSG]);
-  const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [chatHistory, setChatHistory] = useState([]);
-  const [compareProducts, setCompareProducts] = useState([]);
-  const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
-
-  const handleCompareToggle = useCallback((product) => {
-    setCompareProducts((prev) => {
-      const exists = prev.some((p) => p.title === product.title && p.price === product.price);
-      if (exists) {
-        return prev.filter((p) => !(p.title === product.title && p.price === product.price));
-      } else {
-        if (prev.length >= 3) {
-          alert("You can compare up to 3 products at a time.");
-          return prev;
-        }
-        return [...prev, product];
-      }
-    });
-  }, []);
-
-  // Autocomplete state
-  const [suggestions, setSuggestions] = useState([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [activeSuggestion, setActiveSuggestion] = useState(-1);
-
-  const chatEndRef = useRef(null);
-  const textareaRef = useRef(null);
-  const inputAreaRef = useRef(null);
-
-  // Auto-scroll to bottom
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
-
-  // Auto-resize textarea
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px';
+export default function Dashboard() {
+  const tools = [
+    {
+      id: 'shopping',
+      title: 'ShopMind AI',
+      category: 'Shopping Assistant',
+      description: 'Find products, compare prices across stores, get budget recommendations, and analyze alternatives using AI.',
+      icon: '🛍️',
+      active: true,
+      link: '/shopping',
+      badge: 'Gemini Powered',
+      features: ['Web Search Integration', 'Multi-Product Compare', 'Smart Budget Alerts']
+    },
+    {
+      id: 'travel',
+      title: 'RouteMind AI',
+      category: 'Travel & Route Planner',
+      description: 'Interactive map-based travel planner. Compare CNG, Petrol, & Diesel fuel costs, calculate toll plazas, and search car mileages with AI.',
+      icon: '🚗',
+      active: true,
+      link: '/travel',
+      badge: 'New Tool',
+      features: ['Interactive Leaflet Maps', 'CNG vs Petrol vs Diesel Costing', 'Gemini Vehicle Search', 'Toll Tax Simulation']
+    },
+    {
+      id: 'notemind',
+      title: 'NoteMind AI',
+      category: 'Smart Notepad',
+      description: 'Organize your thoughts, write markdown logs, and automatically summarize notes using local LLM processing.',
+      icon: '📝',
+      active: false,
+      badge: 'Coming Soon',
+      features: ['Markdown Formatting', 'AI Quick Summaries', 'PDF & Doc Export']
+    },
+    {
+      id: 'pdfmind',
+      title: 'PDFMind AI',
+      category: 'Document Utility',
+      description: 'Fast, secure client-side document processing tool to split, merge, compress, and extract pages from PDFs.',
+      icon: '📄',
+      active: false,
+      badge: 'Coming Soon',
+      features: ['Private Client-Side', 'Meta Editing', 'PDF Compressing']
     }
-  }, [input]);
-
-  // Click outside → close dropdown
-  useEffect(() => {
-    const handler = (e) => {
-      if (inputAreaRef.current && !inputAreaRef.current.contains(e.target)) {
-        setShowSuggestions(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  // Instant client-side suggestions — zero API calls
-  useEffect(() => {
-    const trimmed = input.trim();
-    if (trimmed.length < 2) {
-      setSuggestions([]);
-      setShowSuggestions(false);
-      return;
-    }
-    const results = getClientSuggestions(trimmed);
-    setSuggestions(results);
-    setShowSuggestions(results.length > 0);
-    setActiveSuggestion(-1);
-  }, [input]);
-
-  const addMessage = (msg) =>
-    setMessages((prev) => [...prev, { id: Date.now() + Math.random(), time: new Date(), ...msg }]);
-
-  const isShoppingQuery = (text) => {
-    const kw = [
-      'buy','purchase','shop','price','cost','cheap','affordable','best','top','under','budget',
-      'recommend','suggest','find','search','₹','rs','rupee','shoes','laptop','phone','mobile',
-      'headphone','watch','bag','camera','tablet','earphone','keyboard','mouse','monitor','tv',
-      'refrigerator','washing','ac','cooler','fan','shirt','dress','jacket','jeans','sneakers',
-      'sandals','gaming','iphone','samsung','oneplus','redmi','realme','xiaomi','oppo','vivo',
-      'compare','rating','review','alternative','select','choose','versus','vs','show only','other','different'
-    ];
-    const lower = text.toLowerCase();
-    return kw.some((k) => lower.includes(k));
-  };
-
-  const handleSearch = useCallback(async (queryText) => {
-    const trimmed = (queryText || input).trim();
-    if (!trimmed || isLoading) return;
-
-    setInput('');
-    setSuggestions([]);
-    setShowSuggestions(false);
-    setIsLoading(true);
-
-    addMessage({ role: 'user', type: 'text', content: trimmed });
-    const newHistory = [...chatHistory, { role: 'user', content: trimmed }];
-    setChatHistory(newHistory);
-
-    try {
-      if (isShoppingQuery(trimmed)) {
-        const res = await fetch('/api/search', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: trimmed, history: chatHistory }),
-        });
-        const data = await res.json();
-
-        if (!res.ok || data.error) {
-          addMessage({ role: 'bot', type: 'error', content: data.error || 'Something went wrong.' });
-        } else if (data.needsClarification) {
-          // Query is vague — ask clarifying questions before searching
-          addMessage({
-            role: 'bot',
-            type: 'clarify',
-            originalQuery: data.originalQuery || trimmed,
-            questions: data.questions || [],
-          });
-          // Keep chatHistory intact so context is preserved when user answers
-          setChatHistory(newHistory);
-        } else if (data.needsBudgetClarification) {
-          // Bot needs the user to specify a budget for cheaper search
-          addMessage({
-            role: 'bot',
-            type: 'clarification',
-            content: data.clarificationMessage,
-            resolvedQuery: data.resolvedQuery,
-            isFollowUp: true,
-          });
-          // Keep history unchanged so next query still has context
-          setChatHistory(newHistory);
-        } else {
-          addMessage({
-            role: 'bot',
-            type: 'search-result',
-            summary: data.summary,
-            recommendation: data.recommendation,
-            products: data.products || [],
-            alternatives: data.alternatives || [],
-            followUpSuggestions: data.followUpSuggestions || [],
-            noResultsMessage: data.noResultsMessage,
-            budgetNotRealistic: data.budgetNotRealistic || false,
-            searchQuery: data.searchQuery,
-            resolvedQuery: data.resolvedQuery,
-            isFollowUp: data.isFollowUp || false,
-            contextSummary: data.contextSummary,
-            aiPowered: data.aiPowered,
-            geminiError: data.geminiError || false,
-          });
-
-          // Build a rich assistant memory entry that includes actual product results
-          // so future follow-up queries know exactly what was found
-          const productSummaryForMemory = (data.products || []).length > 0
-            ? `Found ${data.products.length} products:\n` +
-              data.products
-                .map((p, i) => `  ${i + 1}. ${p.title} | ${p.price || 'N/A'} | ⭐${p.rating || 'N/A'} | ${p.source || ''}`)
-                .join('\n')
-            : 'No products found within budget.';
-
-          const assistantMemory = [
-            data.summary,
-            data.recommendation ? `Recommendation: ${data.recommendation}` : '',
-            `Search resolved to: "${data.resolvedQuery || data.searchQuery}"`,
-            productSummaryForMemory,
-          ].filter(Boolean).join('\n');
-
-          setChatHistory([...newHistory, {
-            role: 'assistant',
-            content: assistantMemory,
-          }]);
-        }
-      } else {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: trimmed, history: chatHistory }),
-        });
-        const data = await res.json();
-        if (!res.ok || data.error) {
-          addMessage({ role: 'bot', type: 'error', content: data.error || 'Something went wrong.' });
-        } else {
-          addMessage({ role: 'bot', type: 'text', content: data.reply });
-          setChatHistory([...newHistory, { role: 'assistant', content: data.reply }]);
-        }
-      }
-    } catch {
-      addMessage({ role: 'bot', type: 'error', content: '⚠️ Network error. Please check your connection.' });
-    } finally {
-      setIsLoading(false);
-      textareaRef.current?.focus();
-    }
-  }, [input, isLoading, chatHistory]);
-
-  const handleKeyDown = (e) => {
-    if (showSuggestions && suggestions.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setActiveSuggestion((prev) => Math.min(prev + 1, suggestions.length - 1));
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setActiveSuggestion((prev) => Math.max(prev - 1, -1));
-        return;
-      }
-      if (e.key === 'Tab' && activeSuggestion >= 0) {
-        e.preventDefault();
-        setInput(suggestions[activeSuggestion]);
-        setShowSuggestions(false);
-        return;
-      }
-      if (e.key === 'Escape') {
-        setShowSuggestions(false);
-        return;
-      }
-    }
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      if (activeSuggestion >= 0 && showSuggestions) {
-        handleSearch(suggestions[activeSuggestion]);
-      } else {
-        handleSearch(input);
-      }
-    }
-  };
-
-  const handleSuggestionClick = (s) => {
-    setInput(s);
-    setShowSuggestions(false);
-    handleSearch(s);
-  };
-
-  const clearChat = () => {
-    setMessages([WELCOME_MSG]);
-    setChatHistory([]);
-    setInput('');
-    setSuggestions([]);
-    setShowSuggestions(false);
-  };
-
-  const isWelcome = messages.length === 1 && messages[0].id === 'welcome';
+  ];
 
   return (
     <>
-      {/* Animated background */}
+      {/* Shared animated background elements */}
       <div className="bg-orbs" aria-hidden="true">
         <div className="bg-orb bg-orb-1" />
         <div className="bg-orb bg-orb-2" />
@@ -387,367 +56,210 @@ export default function Home() {
       </div>
       <div className="bg-grid" aria-hidden="true" />
 
-      <div className="app-wrapper">
-        {/* ── HEADER ── */}
+      <div className="app-wrapper" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        {/* HEADER */}
         <header className="header">
           <div className="header-brand">
-            <div className="bot-avatar" aria-hidden="true">🛍️</div>
+            <div className="bot-avatar" aria-hidden="true">🌌</div>
             <div>
-              <div className="header-title">ShopMind AI</div>
+              <div className="header-title">MindSuite AI</div>
               <div className="header-subtitle">
-                <span>✦</span> Powered by Gemini + Google Shopping
+                <span>✦</span> Your Intelligent Productivity Hub
               </div>
             </div>
           </div>
           <div className="header-right">
-            <div className="status-badge">
-              <div className="status-dot" />
-              Online
+            <div className="status-badge" style={{ background: 'rgba(255,255,255,0.05)', color: '#a78bfa', borderColor: 'rgba(167,139,250,0.2)' }}>
+              v1.1.0
             </div>
-            {!isWelcome && (
-              <button className="clear-btn" onClick={clearChat} id="clear-chat-btn">
-                ✕ New Chat
-              </button>
-            )}
           </div>
         </header>
 
-        {/* ── CHAT AREA ── */}
-        <main className="chat-area" id="chat-area" role="main">
-          {isWelcome ? (
-            <>
-              <div className="welcome-screen">
-                <div className="welcome-orb" aria-hidden="true">🛍️</div>
+        {/* HERO SECTION */}
+        <main className="chat-area" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 20px' }}>
+          <div style={{ textAlign: 'center', maxWidth: '800px', marginBottom: '40px' }}>
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 14px',
+              borderRadius: '20px',
+              background: 'linear-gradient(90deg, rgba(167,139,250,0.1), rgba(192,132,252,0.1))',
+              border: '1px solid rgba(167,139,250,0.2)',
+              color: '#c084fc',
+              fontSize: '13px',
+              fontWeight: '600',
+              marginBottom: '20px',
+              textTransform: 'uppercase',
+              letterSpacing: '1px'
+            }}>
+              ✨ Unified Productivity Suite
+            </div>
+            
+            <h1 className="welcome-title" style={{ fontSize: '3rem', lineHeight: '1.2', background: 'linear-gradient(135deg, #fff 30%, #a78bfa 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+              One Workspace.<br />Infinite Utilities.
+            </h1>
+            
+            <p className="welcome-subtitle" style={{ fontSize: '1.15rem', color: '#94a3b8', marginTop: '16px', lineHeight: '1.6' }}>
+              Explore smart toolsets designed to save you time. Compare online purchases, estimate travel logistics and fuel dynamics, or organize project notes.
+            </p>
+          </div>
+
+          {/* GRID OF TOOLS */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+            gap: '24px',
+            width: '100%',
+            maxWidth: '1000px',
+            padding: '20px 0'
+          }}>
+            {tools.map((tool) => (
+              <div
+                key={tool.id}
+                style={{
+                  position: 'relative',
+                  borderRadius: '16px',
+                  background: 'rgba(10, 8, 28, 0.55)',
+                  backdropFilter: 'blur(20px)',
+                  WebkitBackdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  padding: '28px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  opacity: tool.active ? 1 : 0.65,
+                  boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)',
+                  overflow: 'hidden'
+                }}
+                className={tool.active ? 'dashboard-card-active' : ''}
+              >
+                {/* Visual Glow for Active Cards */}
+                {tool.active && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '-50px',
+                    right: '-50px',
+                    width: '150px',
+                    height: '150px',
+                    background: tool.id === 'shopping' 
+                      ? 'radial-gradient(circle, rgba(236,72,153,0.15) 0%, rgba(236,72,153,0) 70%)'
+                      : 'radial-gradient(circle, rgba(59,130,246,0.15) 0%, rgba(59,130,246,0) 70%)',
+                    pointerEvents: 'none'
+                  }} />
+                )}
+
                 <div>
-                  <h1 className="welcome-title">Your AI Shopping<br />Assistant</h1>
-                  <p className="welcome-subtitle" style={{ marginTop: '14px' }}>
-                    Stop wasting time on 10 tabs. Describe what you want and get instant comparisons, prices, and AI-powered recommendations.
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <span style={{ fontSize: '2.5rem' }} role="img" aria-label={tool.title}>{tool.icon}</span>
+                    <span style={{
+                      fontSize: '11px',
+                      fontWeight: '600',
+                      padding: '4px 10px',
+                      borderRadius: '12px',
+                      background: tool.active ? 'rgba(167,139,250,0.12)' : 'rgba(255,255,255,0.05)',
+                      border: tool.active ? '1px solid rgba(167,139,250,0.25)' : '1px solid rgba(255,255,255,0.05)',
+                      color: tool.active ? '#a78bfa' : '#94a3b8'
+                    }}>
+                      {tool.badge}
+                    </span>
+                  </div>
+
+                  <h3 style={{ fontSize: '1.35rem', fontWeight: '700', color: '#f8fafc', marginBottom: '6px' }}>
+                    {tool.title}
+                  </h3>
+                  
+                  <span style={{ fontSize: '12px', color: '#a78bfa', fontWeight: '500', display: 'block', marginBottom: '12px' }}>
+                    {tool.category}
+                  </span>
+                  
+                  <p style={{ fontSize: '14px', color: '#94a3b8', lineHeight: '1.5', marginBottom: '20px' }}>
+                    {tool.description}
                   </p>
-                </div>
-                <div className="welcome-features">
-                  {['🔍 Web Search', '⚖️ AI Compare', '💰 Price Filter', '⭐ Smart Rank', '🇮🇳 India Focused'].map((f) => (
-                    <div className="feature-pill" key={f}>{f}</div>
-                  ))}
-                </div>
-              </div>
-              <SuggestionChips onSelect={handleSearch} />
-            </>
-          ) : (
-            messages.map((msg) => (
-              <MessageRenderer 
-                key={msg.id} 
-                msg={msg} 
-                onFollowUp={handleSearch} 
-                compareProducts={compareProducts}
-                onCompareToggle={handleCompareToggle}
-              />
-            ))
-          )}
-          {isLoading && <TypingIndicator />}
-          <div ref={chatEndRef} />
-        </main>
 
-        {/* ── INPUT AREA ── */}
-        <div className="input-area" ref={inputAreaRef}>
-          {/* Autocomplete Dropdown */}
-          {showSuggestions && (
-            <div className="autocomplete-dropdown" role="listbox" id="autocomplete-dropdown">
-              <div className="autocomplete-header">
-                💡 Suggestions
-              </div>
-              {suggestions.map((s, i) => (
-                <div
-                  key={i}
-                  className={`autocomplete-item ${i === activeSuggestion ? 'active' : ''}`}
-                  role="option"
-                  aria-selected={i === activeSuggestion}
-                  onClick={() => handleSuggestionClick(s)}
-                  onMouseEnter={() => setActiveSuggestion(i)}
-                >
-                  <span className="autocomplete-icon">{getIcon(s)}</span>
-                  <span style={{ flex: 1 }}>{highlightMatch(s, input.trim())}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Input row */}
-          <div className="input-wrapper" id="input-wrapper">
-            <textarea
-              ref={textareaRef}
-              className="chat-input"
-              id="chat-input"
-              placeholder='Describe what you want… e.g. "best headphones under ₹2000"'
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                if (e.target.value.trim().length >= 2) setShowSuggestions(true);
-                else setShowSuggestions(false);
-              }}
-              onKeyDown={handleKeyDown}
-              onFocus={() => { if (suggestions.length > 0 && input.trim().length >= 2) setShowSuggestions(true); }}
-              rows={1}
-              disabled={isLoading}
-              autoComplete="off"
-              aria-label="Search input"
-              aria-autocomplete="list"
-              aria-controls="autocomplete-dropdown"
-            />
-            <button
-              className="send-btn"
-              id="send-btn"
-              onClick={() => handleSearch(input)}
-              disabled={isLoading || !input.trim()}
-              aria-label="Send message"
-            >
-              {isLoading ? '⏳' : '🚀'}
-            </button>
-          </div>
-          <p className="input-hint">
-            <span>↵ Enter to search</span> · <span>↑↓ navigate suggestions</span> · <span>Tab to select</span>
-          </p>
-        </div>
-      </div>
-
-      {/* Floating Compare Bar */}
-      {compareProducts.length > 0 && (
-        <div className="floating-compare-bar">
-          <div className="compare-bar-info">
-            <span className="compare-bar-icon">⚖️</span>
-            <span className="compare-bar-text">
-              <strong>{compareProducts.length}</strong> {compareProducts.length === 1 ? 'item' : 'items'} selected to compare (max 3)
-            </span>
-          </div>
-          <div className="compare-bar-actions">
-            <button className="compare-bar-clear" onClick={() => setCompareProducts([])}>Clear</button>
-            <button 
-              className="compare-bar-btn" 
-              onClick={() => setIsCompareModalOpen(true)}
-              disabled={compareProducts.length < 2}
-              title={compareProducts.length < 2 ? "Select at least 2 products to compare" : "Compare selected products"}
-            >
-              Compare {compareProducts.length > 1 ? `(${compareProducts.length})` : ''}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Compare Modal Overlay */}
-      {isCompareModalOpen && (
-        <CompareModal 
-          products={compareProducts} 
-          onClose={() => setIsCompareModalOpen(false)} 
-        />
-      )}
-    </>
-  );
-}
-
-/* ─────────────────────────────────────────────
-   MESSAGE RENDERER
-───────────────────────────────────────────── */
-function MessageRenderer({ msg, onFollowUp, compareProducts = [], onCompareToggle }) {
-  if (msg.role === 'user') {
-    return (
-      <div className="message-wrapper user">
-        <div className="msg-avatar user">👤</div>
-        <div className="msg-body">
-          <div className="msg-bubble user">{msg.content}</div>
-          <div className="msg-time">{formatTime(msg.time)}</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (msg.type === 'error') {
-    return (
-      <div className="message-wrapper">
-        <div className="msg-avatar bot">🤖</div>
-        <div className="msg-body">
-          <div className="error-bubble">⚠️ {msg.content}</div>
-          <div className="msg-time">{formatTime(msg.time)}</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (msg.type === 'clarify') {
-    return (
-      <div className="message-wrapper">
-        <div className="msg-avatar bot">🤖</div>
-        <div className="msg-body">
-          <ClarifyCard
-            originalQuery={msg.originalQuery}
-            questions={msg.questions || []}
-            onSearch={onFollowUp}
-          />
-          <div className="msg-time">{formatTime(msg.time)}</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (msg.type === 'clarification') {
-    // Budget clarification needed — show a polished prompt with quick-pick chips
-    const budgetChips = ['under ₹300', 'under ₹500', 'under ₹800', 'under ₹1000', 'under ₹2000'];
-    return (
-      <div className="message-wrapper">
-        <div className="msg-avatar bot">🤖</div>
-        <div className="msg-body">
-          <div className="clarification-card">
-            <div className="clarification-header">
-              <span>💰</span>
-              <span>Budget Needed</span>
-            </div>
-            <p className="clarification-text"
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
-            />
-            <div className="clarification-chips">
-              {budgetChips.map((chip, i) => (
-                <button
-                  key={i}
-                  className="clarification-chip"
-                  onClick={() => onFollowUp(chip)}
-                >
-                  {chip}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="msg-time">{formatTime(msg.time)}</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (msg.type === 'search-result') {
-    return (
-      <div className="message-wrapper">
-        <div className="msg-avatar bot">🤖</div>
-        <div className="msg-body" style={{ maxWidth: '100%', width: '100%' }}>
-
-          {/* Follow-up context banner */}
-          {msg.isFollowUp && msg.contextSummary && (
-            <div className="followup-context-banner">
-              <span>🔗</span>
-              <span>{msg.contextSummary}</span>
-            </div>
-          )}
-
-
-
-          {/* AI Summary */}
-          {(msg.summary || msg.recommendation) && (
-            <div className="ai-summary">
-              <div className="ai-summary-header">
-                ✦ AI Analysis
-                {msg.resolvedQuery && msg.isFollowUp ? (
-                  <span className="search-tag">🔗 "{msg.resolvedQuery}"</span>
-                ) : msg.searchQuery ? (
-                  <span className="search-tag">🔍 "{msg.searchQuery}"</span>
-                ) : null}
-              </div>
-              {msg.summary && <p>{msg.summary}</p>}
-              {msg.recommendation && (
-                <div className="ai-recommendation">
-                  <span>🏆</span>
-                  <span>{msg.recommendation}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* No results within budget — honest message + alternatives */}
-          {!msg.products?.length && msg.budgetNotRealistic && (
-            <div className="no-results-card">
-              <div className="no-results-header">
-                <span>😔</span>
-                <span>No results found in this budget</span>
-              </div>
-              <p className="no-results-msg">{msg.summary}</p>
-
-              {msg.alternatives?.length > 0 && (
-                <div className="alternatives-section">
-                  <div className="alternatives-label">💡 Try these alternatives instead:</div>
-                  {msg.alternatives.map((alt, i) => (
-                    <div key={i} className="alternative-item">
-                      <div className="alternative-title">{alt.title}</div>
-                      <div className="alternative-meta">
-                        <span className="alternative-price">~{alt.approxPrice}</span>
-                        <span className="alternative-reason">{alt.reason}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '28px' }}>
+                    {tool.features.map((feature, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#cbd5e1' }}>
+                        <span style={{ color: tool.active ? '#34d399' : '#64748b' }}>✓</span>
+                        <span>{feature}</span>
                       </div>
-                      <button
-                        className="alternative-search-btn"
-                        onClick={() => onFollowUp(alt.title)}
-                      >
-                        🔍 Search this
-                      </button>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              )}
-            </div>
-          )}
 
-          {/* Generic no results (no budget) */}
-          {!msg.products?.length && !msg.budgetNotRealistic && msg.noResultsMessage && (
-            <div className="msg-bubble bot" style={{ marginTop: 8 }}>
-              🔍 {msg.noResultsMessage}
-            </div>
-          )}
-
-          {/* Product Cards */}
-          {msg.products?.length > 0 && (
-            <div className="products-section" style={{ marginTop: 14 }}>
-              <div className="products-header">
-                🛒 Products Found
-                <span className="products-count">{msg.products.length}</span>
-              </div>
-              <div className="products-grid">
-                {msg.products.map((p, i) => (
-                  <ProductCard 
-                    key={i} 
-                    product={p} 
-                    index={i} 
-                    isComparing={compareProducts.some(cp => cp.title === p.title && cp.price === p.price)}
-                    onCompareToggle={onCompareToggle}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Follow-ups */}
-          {msg.followUpSuggestions?.length > 0 && (
-            <div className="followup-wrap">
-              <p className="followup-label">💬 Ask a follow-up…</p>
-              <div className="followup-chips">
-                {msg.followUpSuggestions.map((s, i) => (
-                  <button key={i} className="followup-chip" onClick={() => onFollowUp(s)}>
-                    {s}
+                {tool.active ? (
+                  <a
+                    href={tool.link}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      padding: '12px',
+                      borderRadius: '10px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      color: '#fff',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      textDecoration: 'none',
+                      transition: 'all 0.25s ease',
+                      cursor: 'pointer'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.background = 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)';
+                      e.currentTarget.style.borderColor = 'transparent';
+                      e.currentTarget.style.boxShadow = '0 4px 16px rgba(124, 58, 237, 0.3)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    Open Utility →
+                  </a>
+                ) : (
+                  <button
+                    disabled
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      padding: '12px',
+                      borderRadius: '10px',
+                      background: 'rgba(255, 255, 255, 0.02)',
+                      border: '1px solid rgba(255, 255, 255, 0.03)',
+                      color: '#475569',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      cursor: 'not-allowed',
+                      width: '100%'
+                    }}
+                  >
+                    🔒 Coming Soon
                   </button>
-                ))}
+                )}
               </div>
-            </div>
-          )}
+            ))}
+          </div>
 
-          <div className="msg-time">{formatTime(msg.time)}</div>
-        </div>
+          {/* Footer inside main */}
+          <footer style={{ marginTop: '60px', color: '#64748b', fontSize: '13px', textAlign: 'center' }}>
+            MindSuite AI · Local Intelligent Workspace · Designed for developers
+          </footer>
+        </main>
       </div>
-    );
-  }
 
-  // Default text
-  return (
-    <div className="message-wrapper">
-      <div className="msg-avatar bot">🤖</div>
-      <div className="msg-body">
-        <div
-          className="msg-bubble bot"
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
-        />
-        <div className="msg-time">{formatTime(msg.time)}</div>
-      </div>
-    </div>
+      <style jsx global>{`
+        .dashboard-card-active:hover {
+          transform: translateY(-5px);
+          border-color: rgba(167, 139, 250, 0.3) !important;
+          box-shadow: 0 12px 40px 0 rgba(124, 58, 237, 0.15) !important;
+        }
+      `}</style>
+    </>
   );
 }

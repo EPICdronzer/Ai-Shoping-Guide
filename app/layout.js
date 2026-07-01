@@ -1,12 +1,12 @@
 import './globals.css';
 
 export const metadata = {
-  title: 'ShopMind AI — Your Smart Shopping Assistant',
-  description: 'Describe what you want in plain language and get instant product comparisons, prices, and recommendations powered by AI.',
-  keywords: 'AI shopping assistant, product search, price comparison, smart shopping bot',
+  title: 'MindSuite AI — Unified Productivity Hub',
+  description: 'An intelligent productivity workspace featuring ShopMind AI (smart shopping assistant) and RouteMind AI (route, fuel, and toll planner).',
+  keywords: 'MindSuite AI, ShopMind AI, RouteMind AI, travel planner, shopping assistant, AI productivity utilities',
   openGraph: {
-    title: 'ShopMind AI — Your Smart Shopping Assistant',
-    description: 'Stop digging through 10 tabs. Describe what you want and get instant AI-powered product comparisons.',
+    title: 'MindSuite AI — Unified Productivity Hub',
+    description: 'Explore smart toolsets designed to save you time. Compare online purchases, estimate travel logistics, or organize project notes with AI.',
     type: 'website',
   },
 };

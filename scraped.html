@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Primary SEO -->
+  <title>Live Petrol &amp; Diesel Prices India | City-wise Fuel Rate Map</title>
+  <meta name="description" content="Check today's petrol and diesel prices across 236 cities in India. Live city-wise fuel rate map updated hourly from official retail listings. Find cheapest petrol prices near you." />
+  <meta name="keywords" content="petrol price today, diesel price today, petrol price India, fuel price map, city wise petrol price, today petrol rate, petrol price per litre, diesel rate India, fuel prices 2026" />
+  <meta name="author" content="fuelpricetoday.in" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://www.fuelpricetoday.in/" />
+
+  <!-- Open Graph (WhatsApp / Facebook previews) -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://www.fuelpricetoday.in/" />
+  <meta property="og:title" content="Live Petrol &amp; Diesel Prices India | City-wise Fuel Rate Map" />
+  <meta property="og:description" content="Check today's petrol and diesel prices across 236 cities in India. Live fuel rate map updated hourly." />
+  <meta property="og:site_name" content="fuelpricetoday.in" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Live Petrol &amp; Diesel Prices India | City-wise Fuel Rate Map" />
+  <meta name="twitter:description" content="Check today's petrol and diesel prices across 236 cities in India. Updated hourly." />
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "fuelpricetoday.in",
+    "url": "https://www.fuelpricetoday.in/",
+    "description": "Live petrol and diesel prices across 236 cities in India, updated hourly from official retail listings.",
+    "publisher": {
+      "@type": "Organization",
+      "name": "fuelpricetoday.in",
+      "url": "https://www.fuelpricetoday.in/"
+    },
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": {
+        "@type": "EntryPoint",
+        "urlTemplate": "https://www.fuelpricetoday.in/?city={search_term_string}"
+      },
+      "query-input": "required name=search_term_string"
+    }
+  }
+  </script>
+
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-SH6P2BJFRM"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-SH6P2BJFRM');
+  </script>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <link rel="stylesheet" href="styles.css?v=15" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="title">
+      <h1><a href="/" class="brand-link">⛽ FuelPrice<span class="brand-today">Today</span><span class="brand-in">.in</span></a></h1>
+      <p class="subtitle">
+        Pan and zoom the map, or search a city. Click anywhere to see the
+        nearest town's petrol, diesel, and CNG prices.
+      </p>
+    </div>
+    <div class="search-wrap">
+      <input
+        id="search"
+        type="text"
+        placeholder="Search city or town (e.g. Mumbai, Jaipur, Kochi)"
+        autocomplete="off"
+      />
+      <ul id="search-results" class="search-results hidden"></ul>
+    </div>
+  </header>
+
+  <main class="map-viewport">
+    <div id="map" role="application" aria-label="Map of India"></div>
+    <aside id="info-panel" class="info-panel">
+      <h2>Fuel Prices in India</h2>
+      <p class="hint">Click on the map or a marker to view prices.</p>
+      <div id="price-card" class="price-card hidden">
+        <div class="price-card-header">
+          <h3 id="pc-name">—</h3>
+          <p id="pc-region">—</p>
+        </div>
+        <div class="prices">
+          <div class="price petrol">
+            <span class="label">Petrol</span>
+            <span class="value" id="pc-petrol">—</span>
+            <span class="unit">₹ / L</span>
+          </div>
+          <div class="price diesel">
+            <span class="label">Diesel</span>
+            <span class="value" id="pc-diesel">—</span>
+            <span class="unit">₹ / L</span>
+          </div>
+          <div class="price cng hidden" id="pc-cng-card">
+            <span class="label">CNG</span>
+            <span class="value" id="pc-cng">—</span>
+            <span class="unit">₹ / Kg</span>
+          </div>
+        </div>
+        <p class="distance" id="pc-distance"></p>
+        <div class="station-btns">
+          <a class="station-btn" id="pc-petrol-stations" href="#" target="_blank" rel="noopener">
+            ⛽ Find Petrol &amp; Diesel Stations
+          </a>
+          <a class="station-btn cng hidden" id="pc-cng-stations" href="#" target="_blank" rel="noopener">
+            💨 Find CNG Stations
+          </a>
+        </div>
+        <button class="share-btn" id="pc-share" title="Share price card">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          Share Prices
+        </button>
+      </div>
+      <p id="data-status" class="data-status">Loading…</p>
+      <p class="disclaimer">
+        Prices are sourced daily from publicly available retail listings and
+        may not reflect real-time rates.
+      </p>
+      <div class="quick-stats">
+        <div class="qs-row"><span class="qs-label">Avg petrol</span><strong id="qs-avg-petrol">—</strong></div>
+        <div class="qs-row"><span class="qs-label">Avg diesel</span><strong id="qs-avg-diesel">—</strong></div>
+        <div class="qs-divider"></div>
+        <div class="qs-row qs-cheapest"><span class="qs-label">Cheapest petrol</span><strong id="qs-cheapest-petrol">—</strong></div>
+        <div class="qs-row qs-costliest"><span class="qs-label">Costliest petrol</span><strong id="qs-costliest-petrol">—</strong></div>
+        <div class="qs-divider"></div>
+        <div class="qs-row qs-cheapest"><span class="qs-label">Cheapest diesel</span><strong id="qs-cheapest-diesel">—</strong></div>
+        <div class="qs-row qs-costliest"><span class="qs-label">Costliest diesel</span><strong id="qs-costliest-diesel">—</strong></div>
+      </div>
+      <div class="sidebar-news">
+        <div class="sidebar-news-head">Latest News <a href="/news" class="sidebar-news-more">View all →</a></div>
+        <div id="sidebar-news-list"></div>
+      </div>
+
+    </aside>
+  </main>
+
+  <!-- ── 2-column: metro cities (left) + current prices & feed (right) ── -->
+  <section class="content-section two-col-section">
+    <div class="two-col-grid">
+
+      <!-- Left: Top 25 cities table -->
+      <div class="two-col-left">
+        <div class="content-block">
+          <h2 class="content-heading">Fuel Prices in Top 25 Indian Cities</h2>
+          <p class="content-desc">Today's petrol &amp; diesel rates across India's biggest economic hubs. Click a row to locate the city on the map.</p>
+          <div class="table-wrap">
+            <table class="state-table" id="metro-table">
+              <thead>
+                <tr>
+                  <th>City</th>
+                  <th>Petrol</th>
+                  <th>Diesel</th>
+                  <th>CNG</th>
+                </tr>
+              </thead>
+              <tbody id="metro-table-body">
+                <tr><td colspan="4" class="tbl-loading">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: News & Discussion feed -->
+      <div class="two-col-right">
+        <div class="content-block">
+          <div class="news-heading-row">
+            <h2 class="content-heading">News &amp; Discussion</h2>
+            <a href="/news" class="news-view-all">View all →</a>
+          </div>
+          <p class="content-desc">Latest news and community posts on India fuel prices, shortages &amp; policy.</p>
+          <div id="feed-list" class="fd-list">
+            <div class="na-item na-loading">Loading…</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── Full-width: State table ── -->
+  <section class="content-section">
+    <div class="content-block">
+      <h2 class="content-heading">Petrol &amp; Diesel Prices by State</h2>
+      <p class="content-desc">Average fuel prices across all cities tracked per state, sorted cheapest petrol first. Includes the city with the lowest petrol and diesel price in each state.</p>
+      <div class="table-wrap">
+        <table class="state-table" id="state-table">
+          <thead>
+            <tr>
+              <th>State / UT</th>
+              <th>Avg Petrol</th>
+              <th>Avg Diesel</th>
+              <th>Avg CNG</th>
+              <th class="th-left">Lowest Petrol</th>
+              <th class="th-left">Lowest Diesel</th>
+              <th>Cities</th>
+            </tr>
+          </thead>
+          <tbody id="state-table-body">
+            <tr><td colspan="7" class="tbl-loading">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FAQ ── -->
+  <section class="content-section faq-outer">
+    <div class="content-block">
+      <h2 class="content-heading">FAQs</h2>
+      <div class="faq-section">
+        <div class="faq-item">
+          <p class="faq-q">Why do petrol prices differ by city?</p>
+          <p class="faq-a">Fuel prices vary due to local VAT, freight charges, and state-level taxes applied on top of the central base price revised daily by oil companies.</p>
+        </div>
+        <div class="faq-item">
+          <p class="faq-q">How often are prices updated?</p>
+          <p class="faq-a">This map fetches fresh prices every hour from publicly available retail fuel listings across India.</p>
+        </div>
+        <div class="faq-item">
+          <p class="faq-q">Which city has the cheapest petrol today?</p>
+          <p class="faq-a">Check the "Current Prices" section above — or click any marker on the map to see city-specific petrol and diesel rates.</p>
+        </div>
+        <div class="faq-item">
+          <p class="faq-q">Are these prices official?</p>
+          <p class="faq-a">Prices are sourced from publicly available retail listings and are for informational purposes only. For the exact rate, check with your local fuel station.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <p>&copy; 2026 fuelpricetoday.in &middot; All rights reserved</p>
+    <p>
+      Prices are sourced from publicly available retail listings and are for
+      informational purposes only. We make no guarantee of accuracy or
+      completeness. Not affiliated with IOCL, BPCL, HPCL, or any government
+      body. Map data &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors.
+    </p>
+  </footer>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <script src="data.js?v=3"></script>
+  <script src="share-card.js?v=1"></script>
+  <script src="app.js?v=12"></script>
+</body>
+</html>
