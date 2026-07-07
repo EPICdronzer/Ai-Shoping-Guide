@@ -16,6 +16,12 @@ const nextConfig = {
       { protocol: 'https', hostname: '**' },
     ],
   },
+  turbopack: {
+    resolveAlias: {
+      canvas: './empty-module.js',
+      encoding: './empty-module.js',
+    },
+  },
 };
 
 export default nextConfig;
