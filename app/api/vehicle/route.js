@@ -1,34 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import config from '@/lib/config';
-
-const gemini_key = config.GEMINI_API_KEY;
-const genAI = new GoogleGenerativeAI(gemini_key);
-
-const MODEL_CHAIN = [
-  'gemini-2.0-flash-lite',
-  'gemini-1.5-flash-8b',
-  'gemini-2.0-flash',
-  'gemini-1.5-pro-latest',
-];
-
-async function generateWithFallback(prompt) {
-  let lastError;
-  for (const modelName of MODEL_CHAIN) {
-    try {
-      const model = genAI.getGenerativeModel({ model: modelName });
-      const result = await model.generateContent(prompt);
-      console.log(`✓ Vehicle route used model: ${modelName}`);
-      return result.response.text();
-    } catch (err) {
-      console.warn(`✗ Vehicle model ${modelName} failed: ${err.message?.slice(0, 80)}`);
-      lastError = err;
-      if (!err.message?.includes('429') && !err.message?.includes('404') && !err.message?.includes('quota')) {
-        break;
-      }
-    }
-  }
-  throw lastError;
-}
+import { callAI } from '@/lib/ai';
 
 export async function POST(request) {
   let name = '';
@@ -38,10 +8,6 @@ export async function POST(request) {
 
     if (!name?.trim()) {
       return Response.json({ error: 'Vehicle name is required.' }, { status: 400 });
-    }
-
-    if (!gemini_key) {
-      return Response.json({ error: 'Gemini API key not configured.' }, { status: 500 });
     }
 
     const systemPrompt = `You are a vehicle specification lookup assistant.
@@ -62,9 +28,9 @@ Important details:
 - If the vehicle is electric (EV), return petrol: null, diesel: null, cng: null but add an extra key "ev": true and "batteryRange": range_in_km.
 - If you cannot find the exact car, estimate based on similar class vehicles (e.g. if it is a generic hatchback, assume a standard 1.2L engine with ~18 km/l petrol, etc.).`;
 
-    const responseText = await generateWithFallback(systemPrompt);
+    const responseText = await callAI(systemPrompt);
     
-    // Clean up any potential markdown wrapping just in case Gemini ignored the rule
+    // Clean up any potential markdown wrapping
     let cleanJson = responseText.trim();
     if (cleanJson.startsWith('```')) {
       cleanJson = cleanJson.replace(/^```(json)?/, '').replace(/```$/, '').trim();
@@ -74,9 +40,9 @@ Important details:
       const vehicleData = JSON.parse(cleanJson);
       return Response.json(vehicleData);
     } catch (parseError) {
-      console.error('Failed to parse Gemini JSON:', responseText, parseError);
+      console.error('Failed to parse OpenRouter JSON:', responseText, parseError);
       return Response.json({
-        error: 'Invalid response format from Gemini model.',
+        error: 'Invalid response format from AI model.',
         rawText: responseText
       }, { status: 500 });
     }

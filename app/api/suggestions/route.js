@@ -1,8 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import config from '@/lib/config';
-const gemini_key = config.GEMINI_API_KEY;
-
-const genAI = new GoogleGenerativeAI(gemini_key);
+import { callAI } from '@/lib/ai';
 
 // Smart predefined suggestions by keyword
 const SUGGESTION_MAP = {
@@ -96,37 +92,24 @@ export async function POST(request) {
 
     const trimmed = query.trim();
 
-    // Try AI suggestions first (fast & short prompt)
-    if (gemini_key) {
-      try {
-        const MODEL_CHAIN = ['gemini-2.0-flash-lite', 'gemini-1.5-flash-8b', 'gemini-2.0-flash'];
-        for (const modelName of MODEL_CHAIN) {
-          try {
-            const model = genAI.getGenerativeModel({ model: modelName });
-            const prompt = `Generate 5 smart shopping search suggestions for an Indian user who typed: "${trimmed}"
+    try {
+      const prompt = `Generate 5 smart shopping search suggestions for an Indian user who typed: "${trimmed}"
 Return ONLY a JSON array of 5 short suggestion strings (under 60 chars each). Focus on price ranges in ₹, popular brands, and use cases.
 Example: ["iPhone 14 under ₹50,000", "iPhone 14 vs Samsung S23", "Best refurbished iPhone 14"]
 Return ONLY the JSON array, nothing else.`;
 
-            const result = await Promise.race([
-              model.generateContent(prompt),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
-            ]);
+      const responseText = await Promise.race([
+        callAI(prompt),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
+      ]);
 
-            const raw = result.response.text().trim();
-            const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-            const suggestions = JSON.parse(cleaned);
-            if (Array.isArray(suggestions) && suggestions.length > 0) {
-              return Response.json({ suggestions: suggestions.slice(0, 5), aiPowered: true });
-            }
-            break;
-          } catch (modelErr) {
-            if (!modelErr.message?.includes('429') && !modelErr.message?.includes('quota') && !modelErr.message?.includes('404')) break;
-          }
-        }
-      } catch {
-        // fall through to pattern suggestions
+      const cleaned = responseText.trim().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const suggestions = JSON.parse(cleaned);
+      if (Array.isArray(suggestions) && suggestions.length > 0) {
+        return Response.json({ suggestions: suggestions.slice(0, 5), aiPowered: true });
       }
+    } catch (e) {
+      console.warn('AI suggestions failed, falling back to patterns:', e.message);
     }
 
     // Fallback: pattern-based suggestions

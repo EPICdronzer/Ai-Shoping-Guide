@@ -32,14 +32,12 @@ export default function NoteMind() {
     if (!note.trim()) return;
     setAiLoading(true); setAiError('');
     try {
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || 'YOUR_KEY');
-      const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+      const { callAI } = await import('@/lib/ai');
       const prompt = `Summarize the following note concisely in 3-5 bullet points. Focus on key ideas:\n\n${note}`;
-      const result = await model.generateContent(prompt);
-      setAiResult(result.response.text());
+      const result = await callAI(prompt);
+      setAiResult(result);
     } catch (err) {
-      setAiError('Gemini API error. Add NEXT_PUBLIC_GEMINI_API_KEY to .env.local');
+      setAiError('OpenRouter API error. Add NEXT_PUBLIC_GEMINI_API_KEY to .env.local');
     }
     setAiLoading(false);
   };

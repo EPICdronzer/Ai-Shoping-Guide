@@ -14,12 +14,10 @@ function AstrologyTool() {
   const getHoroscope = async () => {
     setLoading(true);
     try {
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || '');
-      const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+      const { callAI } = await import('@/lib/ai');
       const prompt = `Provide a detailed astrological horoscope/reading for sign ${sign} on the topic of "${topic}". Format beautifully in 2-3 paragraphs.`;
-      const res = await model.generateContent(prompt);
-      setResult(res.response.text());
+      const res = await callAI(prompt);
+      setResult(res);
     } catch (_) {
       setResult('Failed to load astrological reading. Please check your Gemini API key in env.');
     }
@@ -62,12 +60,10 @@ function TravelPlannerTool() {
   const getItinerary = async () => {
     setLoading(true);
     try {
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || '');
-      const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
+      const { callAI } = await import('@/lib/ai');
       const prompt = `Create a detailed ${days}-day travel itinerary for "${destination}" with a budget level of "${budget}". Outline day-by-day sightseeing highlights, morning, afternoon and evening plans.`;
-      const res = await model.generateContent(prompt);
-      setResult(res.response.text());
+      const res = await callAI(prompt);
+      setResult(res);
     } catch (_) {
       setResult('Failed to generate itinerary. Please try again.');
     }
@@ -399,12 +395,9 @@ function AiChatTool() {
     setLoading(true);
 
     try {
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || '');
-      const model = genAI.getGenerativeModel({ model: 'gemini-pro' });
-      const prompt = input;
-      const res = await model.generateContent(prompt);
-      setMessages(prev => [...prev, { role: 'assistant', content: res.response.text() }]);
+      const { callAI } = await import('@/lib/ai');
+      const res = await callAI(input);
+      setMessages(prev => [...prev, { role: 'assistant', content: res }]);
     } catch (_) {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, I encountered an error. Check your Gemini API Key.' }]);
     }

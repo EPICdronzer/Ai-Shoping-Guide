@@ -6,11 +6,8 @@ const card = { background: 'rgba(10,8,28,0.6)', backdropFilter: 'blur(20px)', bo
 const inputStyle = { width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '12px', color: '#fff', outline: 'none', fontFamily: 'inherit', resize: 'vertical' };
 
 async function callGemini(prompt) {
-  const { GoogleGenerativeAI } = await import('@google/generative-ai');
-  const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY || '');
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-  const result = await model.generateContent(prompt);
-  return result.response.text();
+  const { callAI } = await import('@/lib/ai');
+  return callAI(prompt);
 }
 
 const BLOG_TYPES = ['How-To Guide','Listicle (Top 10)','Opinion / Commentary','Case Study','News Article','Product Review','Tutorial','Beginner's Guide','Interview Style'];

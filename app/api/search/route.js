@@ -1,31 +1,9 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { callAI } from '@/lib/ai';
 import axios from 'axios';
 import config from '@/lib/config';
 
-const gemini_key = config.GEMINI_API_KEY;
-const genAI = new GoogleGenerativeAI(gemini_key);
-
-const MODEL_CHAIN = [
-  'gemini-2.0-flash-lite',
-  'gemini-1.5-flash-8b',
-  'gemini-2.0-flash',
-];
-
 async function generateWithFallback(prompt) {
-  let lastError;
-  for (const modelName of MODEL_CHAIN) {
-    try {
-      const model = genAI.getGenerativeModel({ model: modelName });
-      const result = await model.generateContent(prompt);
-      console.log(`✓ Model: ${modelName}`);
-      return result.response.text();
-    } catch (err) {
-      console.warn(`✗ ${modelName}: ${err.message?.slice(0, 60)}`);
-      lastError = err;
-      if (!err.message?.includes('429') && !err.message?.includes('404') && !err.message?.includes('quota')) break;
-    }
-  }
-  throw lastError;
+  return await callAI(prompt);
 }
 
 const serpapi_key = config.SERPAPI_KEY;
@@ -418,6 +396,7 @@ export async function POST(request) {
   try {
     const { query, history = [] } = await request.json();
 
+    const gemini_key = config.GEMINI_API_KEY;
     if (!query?.trim()) {
       return Response.json({ error: 'Please provide a search query.' }, { status: 400 });
     }
