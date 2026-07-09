@@ -10,7 +10,7 @@ async function callGemini(prompt) {
   return callAI(prompt);
 }
 
-const BLOG_TYPES = ['How-To Guide','Listicle (Top 10)','Opinion / Commentary','Case Study','News Article','Product Review','Tutorial','Beginner's Guide','Interview Style'];
+const BLOG_TYPES = ['How-To Guide','Listicle (Top 10)','Opinion / Commentary','Case Study','News Article','Product Review','Tutorial',"Beginner's Guide",'Interview Style'];
 const TONES = ['Professional','Conversational','Authoritative','Witty','Inspirational','Educational'];
 
 export default function AiBlog() {
