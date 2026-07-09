@@ -379,72 +379,92 @@ export default function Home() {
       </div>
       <div className="bg-grid" aria-hidden="true" />
 
-      <div className="app-wrapper">
-        {/* ── HEADER ── */}
-        <header className="header">
-          <div className="header-brand">
-            <a href="/" className="back-dash-btn" style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 12px',
-              borderRadius: '8px',
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              color: '#fff',
-              fontSize: '14px',
-              fontWeight: '500',
-              marginRight: '12px',
-              textDecoration: 'none',
-              transition: 'all 0.2s ease',
-              cursor: 'pointer'
+      {/* ─── FULL-WIDTH HEADER ─── */}
+      <header style={{
+        position: 'sticky', top: 0, zIndex: 50,
+        width: '100%',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 28px', height: '58px',
+        background: 'rgba(5,3,14,0.92)',
+        backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
+        borderBottom: '1px solid rgba(255,255,255,0.07)',
+        boxShadow: '0 1px 24px 0 rgba(0,0,0,0.4)',
+      }}>
+        {/* LEFT: back + title */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', minWidth: 0 }}>
+          <a
+            href="/"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '5px',
+              fontSize: '12px', fontWeight: '600', color: '#64748b',
+              textDecoration: 'none', letterSpacing: '0.2px',
+              transition: 'color 0.2s', flexShrink: 0,
             }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-            }}>
-              🏠 Hub
-            </a>
-            <div className="bot-avatar" aria-hidden="true">🛍️</div>
-            <div>
-              <div className="header-title">ShopMind AI</div>
-              <div className="header-subtitle">
-                <span>✦</span> Powered by Gemini + Google Shopping
-              </div>
-            </div>
-          </div>
-          <div className="header-right">
-            <div className="status-badge">
-              <div className="status-dot" />
-              Online
-            </div>
-            {!isWelcome && (
-              <button className="clear-btn" onClick={clearChat} id="clear-chat-btn">
-                ✕ New Chat
-              </button>
-            )}
-          </div>
-        </header>
+            onMouseOver={e => e.currentTarget.style.color = '#a78bfa'}
+            onMouseOut={e => e.currentTarget.style.color = '#64748b'}
+          >
+            &#8592;<span className="home-label"> Home</span>
+          </a>
+          <span style={{ width: '1px', height: '18px', background: 'rgba(255,255,255,0.1)', flexShrink: 0 }} />
+          <span style={{
+            fontFamily: "'Plus Jakarta Sans', sans-serif",
+            fontSize: '15px', fontWeight: '800',
+            background: 'linear-gradient(135deg, #fff 40%, #a78bfa 100%)',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            letterSpacing: '-0.3px',
+          }}>ShopMind AI</span>
+        </div>
 
+        {/* RIGHT: status + clear */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 14px', borderRadius: '100px', background: 'linear-gradient(135deg, rgba(124,58,237,0.15) 0%, rgba(6,182,212,0.08) 100%)', border: '1px solid rgba(167,139,250,0.18)', fontSize: '12px', fontWeight: '700', color: '#a78bfa', letterSpacing: '0.2px' }}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', display: 'inline-block', boxShadow: '0 0 6px #10b981' }} />
+            Online
+          </div>
+          {!isWelcome && (
+            <button
+              onClick={clearChat}
+              id="clear-chat-btn"
+              style={{
+                padding: '6px 14px', borderRadius: '100px',
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: '#94a3b8', fontSize: '12px', fontWeight: '600',
+                cursor: 'pointer', transition: 'all 0.2s',
+              }}
+              onMouseOver={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#f1f5f9'; }}
+              onMouseOut={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = '#94a3b8'; }}
+            >
+              New Chat
+            </button>
+          )}
+        </div>
+      </header>
+
+      <div className="app-wrapper">
         {/* ── CHAT AREA ── */}
         <main className="chat-area" id="chat-area" role="main">
           {isWelcome ? (
             <>
-              <div className="welcome-screen">
-                <div className="welcome-orb" aria-hidden="true">🛍️</div>
-                <div>
-                  <h1 className="welcome-title">Your AI Shopping<br />Assistant</h1>
-                  <p className="welcome-subtitle" style={{ marginTop: '14px' }}>
-                    Stop wasting time on 10 tabs. Describe what you want and get instant comparisons, prices, and AI-powered recommendations.
-                  </p>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '32px 20px 20px', gap: '16px' }}>
+                {/* Brand badge */}
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 12px', borderRadius: '20px', background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.18)', color: '#a78bfa', fontSize: '11px', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+                  AI Shopping Assistant
                 </div>
-                <div className="welcome-features">
-                  {['🔍 Web Search', '⚖️ AI Compare', '💰 Price Filter', '⭐ Smart Rank', '🇮🇳 India Focused'].map((f) => (
-                    <div className="feature-pill" key={f}>{f}</div>
+
+                <h1 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 'clamp(1.6rem, 5vw, 2.4rem)', fontWeight: '900', letterSpacing: '-1px', lineHeight: 1.1, background: 'linear-gradient(135deg, #fff 30%, #a78bfa 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: 0 }}>
+                  Find Anything,<br />Instantly.
+                </h1>
+
+                <p style={{ fontSize: '0.92rem', color: '#94a3b8', lineHeight: 1.55, maxWidth: '420px', margin: 0 }}>
+                  Describe what you need — ShopMind searches, compares, and ranks products for you in seconds.
+                </p>
+
+                {/* Feature pills */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px', marginTop: '4px' }}>
+                  {['Web Search', 'AI Compare', 'Price Filter', 'Smart Rank', 'India Focused'].map((f) => (
+                    <div key={f} style={{ padding: '5px 12px', borderRadius: '20px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#cbd5e1', fontSize: '12px', fontWeight: '600' }}>{f}</div>
                   ))}
                 </div>
               </div>

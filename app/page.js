@@ -3,6 +3,16 @@ import { useState } from 'react';
 
 export default function Dashboard() {
   const [search, setSearch] = useState('');
+  const [expandedTools, setExpandedTools] = useState({});
+
+  const toggleExpand = (toolId) => {
+    if (typeof window !== 'undefined' && window.innerWidth <= 600) {
+      setExpandedTools(prev => ({
+        ...prev,
+        [toolId]: !prev[toolId]
+      }));
+    }
+  };
 
   const tools = [
     // Active / Main Tools
@@ -843,45 +853,74 @@ export default function Dashboard() {
       </div>
       <div className="bg-grid" aria-hidden="true" />
 
-      <div className="app-wrapper" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-        <header className="header">
-          <div className="header-brand">
-            <div className="bot-avatar" aria-hidden="true">🌌</div>
-            <div>
-              <div className="header-title">MindSuite AI</div>
-              <div className="header-subtitle">
-                <span>✦</span> Your Intelligent Productivity Hub
-              </div>
-            </div>
-          </div>
-          <div className="header-right">
-            <div className="status-badge" style={{ background: 'rgba(255,255,255,0.05)', color: '#a78bfa', borderColor: 'rgba(167,139,250,0.2)' }}>
-              v2.1.0
-            </div>
-          </div>
-        </header>
+      {/* ─── FULL-WIDTH HEADER ─── */}
+      <header style={{
+        position: 'sticky', top: 0, zIndex: 50,
+        width: '100%',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 28px', height: '58px',
+        background: 'rgba(5,3,14,0.92)',
+        backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
+        borderBottom: '1px solid rgba(255,255,255,0.07)',
+        boxShadow: '0 1px 24px 0 rgba(0,0,0,0.4)',
+      }}>
+        {/* LEFT: brand */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: '17px', fontWeight: '900', background: 'linear-gradient(135deg, #fff 30%, #a78bfa 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>
+            MindSuite AI
+          </span>
+          <span className="header-hub-badge" style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '6px', background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.2)', color: '#a78bfa', textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>
+            Productivity Hub
+          </span>
+        </div>
 
+        {/* RIGHT: version */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 14px', borderRadius: '100px', background: 'linear-gradient(135deg, rgba(124,58,237,0.15) 0%, rgba(6,182,212,0.08) 100%)', border: '1px solid rgba(167,139,250,0.18)', fontSize: '12px', fontWeight: '700', color: '#a78bfa', letterSpacing: '0.2px' }}>
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#a78bfa', display: 'inline-block', boxShadow: '0 0 6px #a78bfa' }} />
+          v2.1.0
+        </div>
+      </header>
+
+      <div className="app-wrapper" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
         <main className="chat-area" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 20px' }}>
           {/* Hero */}
           <div style={{ textAlign: 'center', maxWidth: '800px', marginBottom: '32px' }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '20px', background: 'linear-gradient(90deg, rgba(167,139,250,0.1), rgba(192,132,252,0.1))', border: '1px solid rgba(167,139,250,0.2)', color: '#c084fc', fontSize: '13px', fontWeight: '600', marginBottom: '20px', textTransform: 'uppercase', letterSpacing: '1px' }}>
-              ✨ Unified Productivity Suite
+              Unified Productivity Suite
             </div>
 
             <h1 className="welcome-title" style={{ fontSize: '3rem', lineHeight: '1.2', background: 'linear-gradient(135deg, #fff 30%, #a78bfa 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
               One Workspace.<br />Infinite Utilities.
             </h1>
 
-            <p className="welcome-subtitle" style={{ fontSize: '1.1rem', color: '#94a3b8', marginTop: '16px', lineHeight: '1.6' }}>
+            {/* Desktop subtitle */}
+            <p className="welcome-subtitle hero-desktop-text" style={{ fontSize: '1.1rem', color: '#94a3b8', marginTop: '16px', lineHeight: '1.6' }}>
               Convert images, compress files, split PDFs, transform documents, generate code — all running privately in your browser.
             </p>
+
+            {/* Mobile stats — shown only on small screens */}
+            <div className="hero-mobile-stats">
+              <div className="hero-stat-chip">
+                <span className="hero-stat-num">{tools.length}</span>
+                <span className="hero-stat-label">Tools</span>
+              </div>
+              <div className="hero-stat-chip">
+                <span className="hero-stat-num">100%</span>
+                <span className="hero-stat-label">Private</span>
+              </div>
+              <div className="hero-stat-chip">
+                <span className="hero-stat-num">Free</span>
+                <span className="hero-stat-label">Always</span>
+              </div>
+            </div>
           </div>
 
           {/* Search Box */}
           <div style={{ width: '100%', maxWidth: '600px', marginBottom: '40px', position: 'relative' }}>
             <input
               type="text"
-              placeholder="🔍 Search 50+ services (e.g. Compressor, OCR, PDF, QR Code)..."
+              className="dashboard-search-input"
+              placeholder="Search tools — PDF, Image, AI, QR Code, Converter..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               style={{
@@ -920,64 +959,86 @@ export default function Dashboard() {
               <div key={cat} style={{ width: '100%', maxWidth: '1400px', marginBottom: '48px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
                   <h2 style={{ fontSize: '1rem', fontWeight: '700', color: '#e2e8f0', letterSpacing: '0.5px', whiteSpace: 'nowrap', margin: 0 }}>
-                    {cat} ({catTools.length})
+                    {cat.replace(/[^\w\s]/g, '').trim()} <span style={{ color: '#64748b', fontWeight: '500' }}>({catTools.length})</span>
                   </h2>
                   <div style={{ flex: 1, height: '1px', background: 'linear-gradient(90deg, rgba(167, 139, 250, 0.35), transparent)' }} />
                 </div>
 
                 <div className="tools-grid">
-                  {catTools.map((tool) => (
-                    <div
-                      key={tool.id}
-                      style={{
-                        position: 'relative', borderRadius: '16px',
-                        background: 'rgba(10, 8, 28, 0.55)',
-                        backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-                        border: '1px solid rgba(255, 255, 255, 0.08)', padding: '22px',
-                        display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                        boxShadow: '0 4px 24px 0 rgba(0, 0, 0, 0.25)', overflow: 'hidden', minHeight: '300px',
-                      }}
-                      className="dashboard-card-active"
-                    >
-                      <div style={{ position: 'absolute', top: '-40px', right: '-40px', width: '120px', height: '120px', background: `radial-gradient(circle, ${tool.accentColor} 0%, transparent 70%)`, pointerEvents: 'none' }} />
+                  {catTools.map((tool) => {
+                      const isExpanded = !!expandedTools[tool.id];
+                      return (
+                        <div
+                          key={tool.id}
+                          className={`dashboard-card-active${isExpanded ? ' card-expanded' : ''}`}
+                          style={{
+                            position: 'relative', borderRadius: '16px',
+                            background: 'rgba(10, 8, 28, 0.55)',
+                            backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+                            border: `1px solid ${isExpanded ? 'rgba(167,139,250,0.35)' : 'rgba(255, 255, 255, 0.08)'}`,
+                            padding: '0',
+                            display: 'flex', flexDirection: 'column',
+                            transition: 'all 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+                            boxShadow: isExpanded ? '0 16px 40px 0 rgba(124,58,237,0.2)' : '0 4px 24px 0 rgba(0,0,0,0.25)',
+                            overflow: 'hidden',
+                          }}
+                        >
+                          {/* Accent glow */}
+                          <div style={{ position: 'absolute', top: '-40px', right: '-40px', width: '120px', height: '120px', background: `radial-gradient(circle, ${tool.accentColor} 0%, transparent 70%)`, pointerEvents: 'none', zIndex: 0 }} />
 
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
-                          <span style={{ fontSize: '2rem', lineHeight: 1 }} role="img" aria-label={tool.title}>{tool.icon}</span>
-                          <span style={{ fontSize: '10px', fontWeight: '700', padding: '3px 9px', borderRadius: '10px', background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.25)', color: '#a78bfa', letterSpacing: '0.3px', textTransform: 'uppercase' }}>
-                            {tool.badge}
-                          </span>
-                        </div>
-
-                        <h3 style={{ fontSize: '1.05rem', fontWeight: '700', color: '#f1f5f9', marginBottom: '4px', lineHeight: '1.3' }}>{tool.title}</h3>
-
-                        <span style={{ fontSize: '11px', color: tool.badgeColor, fontWeight: '600', display: 'block', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          {tool.category.replace(/[^\w\s]|_/g, "").trim()}
-                        </span>
-
-                        <p style={{ fontSize: '12.5px', color: '#94a3b8', lineHeight: '1.55', marginBottom: '14px' }}>{tool.description}</p>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '20px' }}>
-                          {tool.features.map((feature, i) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '11.5px', color: '#cbd5e1' }}>
-                              <span style={{ color: tool.badgeColor, fontSize: '10px' }}>✓</span>
-                              <span>{feature}</span>
+                          {/* COLLAPSED HEADER ROW — always visible, clickable on mobile */}
+                          <div
+                            className="card-header-row"
+                            onClick={() => toggleExpand(tool.id)}
+                            style={{
+                              display: 'flex', flexDirection: 'column', gap: '8px',
+                              padding: '14px 16px', cursor: 'pointer', position: 'relative', zIndex: 1,
+                            }}
+                          >
+                            {/* Top row: badge left, chevron right */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <span style={{ display: 'inline-block', fontSize: '8px', fontWeight: '700', padding: '2px 8px', borderRadius: '6px', background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.25)', color: '#a78bfa', letterSpacing: '0.5px', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                                {tool.badge}
+                              </span>
+                              {/* Chevron — only shown on mobile via CSS */}
+                              <span className="card-chevron" style={{ fontSize: '13px', color: '#a78bfa', flexShrink: 0, transition: 'transform 0.3s', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>▾</span>
                             </div>
-                          ))}
-                        </div>
-                      </div>
 
-                      <a
-                        href={tool.link}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '10px', borderRadius: '10px', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', color: '#fff', fontSize: '13px', fontWeight: '600', textDecoration: 'none', transition: 'all 0.25s ease', cursor: 'pointer' }}
-                        onMouseOver={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)'; e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(124, 58, 237, 0.35)'; }}
-                        onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'; e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)'; e.currentTarget.style.boxShadow = 'none'; }}
-                      >
-                        Open Tool →
-                      </a>
-                    </div>
-                  ))}
+                            {/* Bottom row: title + subtext */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <div>
+                                <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#f1f5f9', lineHeight: '1.3' }}>{tool.title}</div>
+                                <div style={{ fontSize: '9px', color: tool.badgeColor, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '2px' }}>
+                                  {tool.category.replace(/[^\w\s]|_/g, '').trim()}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* EXPANDABLE BODY — always visible on desktop, toggled on mobile */}
+                          <div className={`card-body${isExpanded ? ' card-body-open' : ''}`} style={{ padding: '0 20px', position: 'relative', zIndex: 1 }}>
+                            <p style={{ fontSize: '12.5px', color: '#94a3b8', lineHeight: '1.55', marginBottom: '14px' }}>{tool.description}</p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '20px' }}>
+                              {tool.features.map((feature, i) => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '11.5px', color: '#cbd5e1' }}>
+                                  <span style={{ color: tool.badgeColor, fontSize: '10px' }}>✓</span>
+                                  <span>{feature}</span>
+                                </div>
+                              ))}
+                            </div>
+                            <a
+                              href={tool.link}
+                              onClick={(e) => e.stopPropagation()}
+                              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '13px', fontWeight: '600', textDecoration: 'none', transition: 'all 0.25s ease', cursor: 'pointer', marginBottom: '20px' }}
+                              onMouseOver={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)'; e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(124,58,237,0.35)'; }}
+                              onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; e.currentTarget.style.boxShadow = 'none'; }}
+                            >
+                              Open Tool →
+                            </a>
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
             );
@@ -996,30 +1057,6 @@ export default function Dashboard() {
           </footer>
         </main>
       </div>
-
-      <style jsx global>{`
-        .tools-grid {
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 18px;
-          width: 100%;
-        }
-        .dashboard-card-active:hover {
-          transform: translateY(-5px);
-          border-color: rgba(167, 139, 250, 0.35) !important;
-          box-shadow: 0 16px 40px 0 rgba(124, 58, 237, 0.2) !important;
-        }
-        @media (max-width: 1280px) {
-          .tools-grid { grid-template-columns: repeat(3, 1fr); }
-        }
-        @media (max-width: 900px) {
-          .tools-grid { grid-template-columns: repeat(2, 1fr); }
-        }
-        @media (max-width: 600px) {
-          .tools-grid { grid-template-columns: 1fr; gap: 14px; }
-          .welcome-title { font-size: 2rem !important; }
-        }
-      `}</style>
     </>
   );
 }

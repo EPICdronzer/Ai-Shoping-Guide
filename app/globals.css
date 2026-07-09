@@ -656,9 +656,16 @@ body {
 /* ============================================
    SUGGESTION CHIPS (welcome)
    ============================================ */
-.suggestions-section { display: flex; flex-direction: column; gap: 10px; }
+.suggestions-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 20px;
+  width: 100%;
+  box-sizing: border-box;
+}
 .suggestions-label { font-size: 12px; color: var(--text-3); font-weight: 500; }
-.chips-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.chips-row { display: flex; gap: 8px; flex-wrap: wrap; width: 100%; }
 .chip {
   padding: 9px 16px;
   background: var(--bg-card);
@@ -678,6 +685,20 @@ body {
   color: var(--violet-light);
   transform: translateY(-2px);
   box-shadow: 0 4px 20px rgba(124,58,237,0.15);
+}
+
+@media (max-width: 600px) {
+  .suggestions-section {
+    padding: 0 16px;
+  }
+  .chip {
+    white-space: normal;
+    text-align: left;
+    max-width: 100%;
+    word-break: break-word;
+    border-radius: 12px;
+    line-height: 1.4;
+  }
 }
 
 /* ============================================
@@ -823,11 +844,11 @@ body {
   outline: none;
   color: var(--text-1);
   font-family: 'Inter', sans-serif;
-  font-size: 15px;
+  font-size: 13.5px;
   resize: none;
   max-height: 120px;
   min-height: 24px;
-  line-height: 1.6;
+  line-height: 1.5;
   scrollbar-width: none;
 }
 .chat-input::placeholder { color: var(--text-3); }
@@ -931,6 +952,22 @@ body {
   .msg-body { max-width: 88%; }
   .header-subtitle { display: none; }
   .welcome-title { font-size: 26px; }
+  .input-area {
+    padding: 10px 10px 20px 10px !important;
+  }
+  .input-wrapper {
+    padding: 8px 10px 8px 14px !important;
+    border-radius: 14px !important;
+  }
+  .chat-input {
+    font-size: 12.5px !important;
+    line-height: 1.4 !important;
+  }
+  .send-btn {
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: 10px !important;
+  }
 }
 
 /* ============================================
@@ -1688,5 +1725,137 @@ body.light .status-badge { background: rgba(16,185,129,0.08); }
   color: #fff;
   box-shadow: 0 0 16px rgba(245,158,11,0.25);
   transform: translateY(-1px);
+}
+
+/* ============================================
+   GLOBAL HEADER — mobile tweaks
+   ============================================ */
+@media (max-width: 600px) {
+  .home-label { display: none; }
+}
+
+/* ============================================
+   DASHBOARD / HOME PAGE SPECIFIC STYLES
+   ============================================ */
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  width: 100%;
+}
+.dashboard-card-active:hover {
+  transform: translateY(-5px);
+  border-color: rgba(167, 139, 250, 0.35) !important;
+  box-shadow: 0 16px 40px 0 rgba(124, 58, 237, 0.2) !important;
+}
+
+/* Desktop: always show full card body, hide chevron */
+.card-chevron { display: none; }
+.card-body {
+  display: block;
+  padding-top: 2px;
+}
+.card-header-row { cursor: default !important; }
+
+@media (max-width: 1280px) {
+  .tools-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 900px) {
+  .tools-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* === MOBILE: Compact rectangular cards === */
+@media (max-width: 600px) {
+  .tools-grid { grid-template-columns: 1fr; gap: 10px; }
+  .welcome-title { font-size: 2rem !important; }
+
+  /* Hide "Productivity Hub" badge on mobile */
+  .header-hub-badge { display: none !important; }
+
+  /* Responsive search box size */
+  .dashboard-search-input {
+    padding: 10px 14px !important;
+    font-size: 13px !important;
+    border-radius: 10px !important;
+  }
+  .dashboard-search-input + button {
+    right: 12px !important;
+    font-size: 14px !important;
+  }
+
+  /* Hide long desktop text on mobile */
+  .hero-desktop-text { display: none !important; }
+
+  /* Show chevron on mobile */
+  .card-chevron { display: inline !important; }
+  .card-header-row { cursor: pointer !important; }
+
+  /* Collapsed body: hidden with zero max-height */
+  .card-body {
+    max-height: 0;
+    overflow: hidden;
+    padding-top: 0 !important;
+    transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+    opacity: 0;
+  }
+
+  /* Expanded body */
+  .card-body.card-body-open {
+    max-height: 600px;
+    opacity: 1;
+    padding-top: 0;
+  }
+
+  /* Keep hover lift only on desktop */
+  .dashboard-card-active:hover {
+    transform: none;
+  }
+
+  /* Expanded card highlight */
+  .dashboard-card-active.card-expanded {
+    border-color: rgba(167, 139, 250, 0.4) !important;
+    box-shadow: 0 8px 32px 0 rgba(124, 58, 237, 0.18) !important;
+  }
+}
+
+/* Hero mobile stat chips — hidden on desktop */
+.hero-mobile-stats { display: none; }
+
+@media (max-width: 600px) {
+  .hero-mobile-stats {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 20px;
+    flex-wrap: nowrap;
+  }
+  .hero-stat-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(167,139,250,0.08);
+    border: 1px solid rgba(167,139,250,0.2);
+    border-radius: 12px;
+    flex: 1;
+    max-width: 100px;
+    backdrop-filter: blur(10px);
+  }
+  .hero-stat-num {
+    font-size: 1.2rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #fff 30%, #a78bfa 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1.2;
+  }
+  .hero-stat-label {
+    font-size: 9px;
+    color: #94a3b8;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 3px;
+  }
 }
 

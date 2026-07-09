@@ -696,52 +696,53 @@ export default function TravelPlanner() {
       </div>
       <div className="bg-grid" aria-hidden="true" />
 
-      <div className="app-wrapper" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-        {/* HEADER */}
-        <header className="header">
-          <div className="header-brand">
-            <a href="/" className="back-dash-btn" style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 12px',
-              borderRadius: '8px',
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              color: '#fff',
-              fontSize: '14px',
-              fontWeight: '500',
-              marginRight: '12px',
-              textDecoration: 'none',
-              transition: 'all 0.2s ease',
-              cursor: 'pointer'
+      {/* ─── FULL-WIDTH HEADER ─── */}
+      <header style={{
+        position: 'sticky', top: 0, zIndex: 50,
+        width: '100%',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 28px', height: '58px',
+        background: 'rgba(5,3,14,0.92)',
+        backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
+        borderBottom: '1px solid rgba(255,255,255,0.07)',
+        boxShadow: '0 1px 24px 0 rgba(0,0,0,0.4)',
+      }}>
+        {/* LEFT: back + title */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', minWidth: 0 }}>
+          <a
+            href="/"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '5px',
+              fontSize: '12px', fontWeight: '600', color: '#64748b',
+              textDecoration: 'none', letterSpacing: '0.2px',
+              transition: 'color 0.2s', flexShrink: 0,
             }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-            }}>
-              🏠 Hub
-            </a>
-            <div className="bot-avatar" aria-hidden="true">🚗</div>
-            <div>
-              <div className="header-title">RouteMind AI</div>
-              <div className="header-subtitle">
-                <span>✦</span> Route dynamics, Fuel comparisons, and Toll planner
-              </div>
-            </div>
-          </div>
-          <div className="header-right">
-            <div className="status-badge" style={{ background: 'rgba(16,185,129,0.1)', color: '#34d399', borderColor: 'rgba(52,211,153,0.2)' }}>
-              Online
-            </div>
-          </div>
-        </header>
+            onMouseOver={e => e.currentTarget.style.color = '#a78bfa'}
+            onMouseOut={e => e.currentTarget.style.color = '#64748b'}
+          >
+            &#8592;<span className="home-label"> Home</span>
+          </a>
+          <span style={{ width: '1px', height: '18px', background: 'rgba(255,255,255,0.1)', flexShrink: 0 }} />
+          <span style={{
+            fontFamily: "'Plus Jakarta Sans', sans-serif",
+            fontSize: '15px', fontWeight: '800',
+            background: 'linear-gradient(135deg, #fff 40%, #a78bfa 100%)',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            letterSpacing: '-0.3px',
+          }}>RouteMind AI</span>
+        </div>
 
+        {/* RIGHT: status pill */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 14px', borderRadius: '100px', background: 'linear-gradient(135deg, rgba(124,58,237,0.15) 0%, rgba(6,182,212,0.08) 100%)', border: '1px solid rgba(167,139,250,0.18)', fontSize: '12px', fontWeight: '700', color: '#a78bfa', letterSpacing: '0.2px' }}>
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', display: 'inline-block', boxShadow: '0 0 6px #10b981' }} />
+          Online
+        </div>
+      </header>
+
+      <div className="app-wrapper" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
         {/* WORKSPACE CONTENT */}
+
         <main style={{ flex: 1, padding: '20px', display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '20px', maxWidth: '1400px', width: '100%', margin: '0 auto' }}>
           
           {/* LEFT COLUMN: Input Panels & Calculations (7 Columns on large, 12 on small) */}
@@ -1039,7 +1040,7 @@ export default function TravelPlanner() {
                 {/* AI car specifications finder */}
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#94a3b8', marginBottom: '6px' }}>SEARCH CUSTOM CAR SPECIFICATIONS (AI)</label>
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '8px' }} className="vehicle-search-bar">
                     <input
                       type="text"
                       placeholder="e.g. Honda Civic"
@@ -1766,8 +1767,21 @@ export default function TravelPlanner() {
           50% { opacity: 0.5; }
         }
         @media (max-width: 900px) {
+          main {
+            display: flex !important;
+            flex-direction: column !important;
+            padding: 10px !important;
+            gap: 16px !important;
+          }
+          .travel-left-col {
+            order: 2 !important;
+          }
+          .travel-right-col {
+            order: 1 !important;
+          }
           .travel-left-col, .travel-right-col {
             grid-column: span 12 !important;
+            width: 100% !important;
           }
           .location-inputs-grid, .vehicle-selection-grid, .mileage-inputs-grid, .cost-breakdown-cards {
             grid-template-columns: 1fr !important;
@@ -1775,6 +1789,21 @@ export default function TravelPlanner() {
           .metrics-info-row {
             flex-direction: column;
             gap: 12px !important;
+          }
+          /* Make map card responsive height */
+          .travel-right-col > div {
+            height: 360px !important;
+          }
+        }
+        @media (max-width: 600px) {
+          .vehicle-search-bar {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 8px !important;
+          }
+          .vehicle-search-bar button {
+            width: 100% !important;
+            height: 40px !important;
           }
         }
       `}</style>
