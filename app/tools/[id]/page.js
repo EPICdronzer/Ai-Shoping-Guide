@@ -4,6 +4,95 @@ import ToolLayout from '@/app/components/ToolLayout';
 
 const card = { background: 'rgba(10,8,28,0.6)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '16px', padding: '24px', marginBottom: '20px' };
 
+// ─── LOCKED / COMING SOON COMPONENT ───
+function LockedTool({ id }) {
+  const [notified, setNotified] = useState(false);
+  const toolName = id.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+  return (
+    <div style={{ textAlign: 'center', padding: '20px 0' }}>
+      <style>{`
+        @keyframes lockPulse {
+          0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(139,92,246,0.4); }
+          50% { transform: scale(1.05); box-shadow: 0 0 0 20px rgba(139,92,246,0); }
+        }
+        @keyframes shimmer {
+          0% { background-position: -200% center; }
+          100% { background-position: 200% center; }
+        }
+        @keyframes floatUp {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-8px); }
+        }
+        @keyframes rotateLock {
+          0% { transform: rotate(-5deg); }
+          50% { transform: rotate(5deg); }
+          100% { transform: rotate(-5deg); }
+        }
+      `}</style>
+
+      {/* Lock icon */}
+      <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100px', height: '100px', borderRadius: '50%', background: 'radial-gradient(circle, rgba(139,92,246,0.2), rgba(79,70,229,0.1))', border: '2px solid rgba(139,92,246,0.3)', marginBottom: '28px', animation: 'lockPulse 2.5s ease-in-out infinite', position: 'relative' }}>
+        <div style={{ fontSize: '3rem', animation: 'rotateLock 3s ease-in-out infinite' }}>🔒</div>
+      </div>
+
+      {/* Title */}
+      <div style={{ marginBottom: '8px' }}>
+        <span style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '3px', textTransform: 'uppercase', background: 'linear-gradient(90deg, #a78bfa, #818cf8, #a78bfa)', backgroundSize: '200% auto', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', animation: 'shimmer 3s linear infinite' }}>COMING SOON</span>
+      </div>
+      <h2 style={{ color: '#f1f5f9', fontSize: '1.6rem', fontWeight: '800', marginBottom: '12px', lineHeight: '1.2' }}>{toolName}</h2>
+      <p style={{ color: '#64748b', fontSize: '14px', maxWidth: '380px', margin: '0 auto 32px', lineHeight: '1.6' }}>
+        This tool is currently in development. We're building a full, browser-native implementation — no uploads, no servers.
+      </p>
+
+      {/* Feature preview cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '32px', maxWidth: '480px', margin: '0 auto 32px' }}>
+        {[
+          { icon: '🔒', label: 'In Development', desc: 'Being built now' },
+          { icon: '⚡', label: 'Browser Native', desc: 'No upload needed' },
+          { icon: '🎯', label: 'Free Forever', desc: 'Always free' },
+        ].map(f => (
+          <div key={f.label} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '12px', padding: '14px 10px', textAlign: 'center' }}>
+            <div style={{ fontSize: '1.4rem', marginBottom: '6px' }}>{f.icon}</div>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', marginBottom: '2px' }}>{f.label}</div>
+            <div style={{ fontSize: '10px', color: '#475569' }}>{f.desc}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Action buttons */}
+      <div style={{ maxWidth: '400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {!notified ? (
+          <button
+            onClick={() => setNotified(true)}
+            style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#7c3aed,#6d28d9)', color: '#fff', fontSize: '15px', fontWeight: '700', boxShadow: '0 4px 20px rgba(124,58,237,0.4)', transition: 'all 0.2s' }}
+          >
+            🔔 Notify Me When Ready
+          </button>
+        ) : (
+          <div style={{ padding: '14px', borderRadius: '12px', background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)', color: '#34d399', fontSize: '14px', fontWeight: '600' }}>
+            ✅ You're on the list! We'll notify you when {toolName} launches.
+          </div>
+        )}
+        <a href="/" style={{ display: 'block', width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#94a3b8', fontSize: '14px', fontWeight: '600', textDecoration: 'none', textAlign: 'center', boxSizing: 'border-box', transition: 'all 0.2s' }}>
+          ← Browse Available Tools
+        </a>
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ maxWidth: '400px', margin: '28px auto 0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#475569', marginBottom: '6px' }}>
+          <span>Development Progress</span>
+          <span style={{ color: '#a78bfa' }}>In Progress</span>
+        </div>
+        <div style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '100px', height: '6px', overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: '35%', background: 'linear-gradient(90deg,#7c3aed,#a78bfa)', borderRadius: '100px', animation: 'shimmer 2s linear infinite', backgroundSize: '200% auto' }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // 1. AI Astrology Assistant
 function AstrologyTool() {
   const [sign, setSign] = useState('Aries');
@@ -585,17 +674,7 @@ export default function DynamicToolPage({ params }) {
       case 'age-calculator':
         return <AgeCalculatorTool />;
       default:
-        // Default fallback with a highly intuitive Simulator screen
-        return (
-          <div style={{ ...card, textAlign: 'center' }}>
-            <span style={{ fontSize: '3rem' }}>🛠️</span>
-            <h3 style={{ color: '#fff', marginTop: '12px' }}>{id.toUpperCase().replace(/-/g, ' ')}</h3>
-            <p style={{ color: '#94a3b8', fontSize: '14px', marginTop: '8px' }}>This client-side utility is initialized and ready in sandbox mode.</p>
-            <button onClick={() => alert('Simulator mode: action completed successfully.')} style={{ marginTop: '16px', padding: '10px 24px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg,#7c3aed,#4f46e5)', color: '#fff', fontWeight: '700', cursor: 'pointer' }}>
-              Run Tool Simulation
-            </button>
-          </div>
-        );
+        return <LockedTool id={id} />;
     }
   };
 

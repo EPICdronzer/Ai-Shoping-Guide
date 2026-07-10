@@ -1,0 +1,164 @@
+'use client';
+import { useState, useRef, useCallback } from 'react';
+import ToolLayout from '@/app/components/ToolLayout';
+
+const fmt = (b) => b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(2) + ' MB';
+const card = { background: 'rgba(10,8,28,0.6)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '24px', marginBottom: '20px' };
+
+const SPEEDS = [
+  { label: '0.25×', value: 0.25, icon: '🐢', desc: 'Very Slow Motion' },
+  { label: '0.5×', value: 0.5, icon: '🐌', desc: 'Slow Motion' },
+  { label: '1.5×', value: 1.5, icon: '🚶', desc: 'Slightly Fast' },
+  { label: '2×', value: 2, icon: '🏃', desc: 'Double Speed' },
+  { label: '4×', value: 4, icon: '🚀', desc: 'Very Fast' },
+  { label: '8×', value: 8, icon: '⚡', desc: 'Ultra Fast' },
+];
+
+export default function SpeedController() {
+  const [file, setFile] = useState(null);
+  const [videoSrc, setVideoSrc] = useState(null);
+  const [meta, setMeta] = useState({ duration: 0, w: 0, h: 0 });
+  const [speed, setSpeed] = useState(2);
+  const [custom, setCustom] = useState('');
+  const [dragging, setDragging] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const inputRef = useRef(null);
+  const videoRef = useRef(null);
+
+  const loadFile = (f) => {
+    if (!f?.type.startsWith('video/')) { setError('Please select a video file.'); return; }
+    setFile(f); setResult(null); setError(null);
+    setVideoSrc(URL.createObjectURL(f));
+  };
+  const onDrop = useCallback((e) => { e.preventDefault(); setDragging(false); loadFile(e.dataTransfer.files[0]); }, []);
+  const onMeta = () => { const v = videoRef.current; if (v) setMeta({ duration: v.duration, w: v.videoWidth, h: v.videoHeight }); };
+
+  const effectiveSpeed = custom ? parseFloat(custom) || speed : speed;
+
+  const handleProcess = async () => {
+    if (!file || !videoRef.current) return;
+    const sp = Math.max(0.1, Math.min(16, effectiveSpeed));
+    setProcessing(true); setError(null); setProgress(0);
+    try {
+      const video = videoRef.current;
+      const canvas = document.createElement('canvas');
+      canvas.width = meta.w || 1280; canvas.height = meta.h || 720;
+      const ctx = canvas.getContext('2d');
+      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+      // Adjust fps inversely with speed for frame accuracy
+      const fps = sp < 1 ? Math.round(25 / sp) : 25;
+      const recorder = new MediaRecorder(canvas.captureStream(Math.min(fps, 60)), { mimeType: mime, videoBitsPerSecond: 3_000_000 });
+      const chunks = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+      video.muted = true; video.currentTime = 0;
+      video.playbackRate = Math.min(sp, 16);
+      await new Promise(r => setTimeout(r, 200));
+      recorder.start(100);
+      const totalDur = (meta.duration || 10) / sp; // output duration
+      await new Promise((resolve, reject) => {
+        let t0 = null;
+        const draw = (ts) => {
+          if (!t0) t0 = ts;
+          const elapsed = (ts - t0) / 1000;
+          setProgress(Math.min(99, Math.round((elapsed / totalDur) * 100)));
+          if (elapsed >= totalDur || video.ended) { recorder.stop(); resolve(); return; }
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const delay = sp < 1 ? (1000 / fps) : 40;
+          setTimeout(() => requestAnimationFrame(draw), delay);
+        };
+        requestAnimationFrame(draw);
+        recorder.onstop = resolve; recorder.onerror = reject;
+      });
+      video.playbackRate = 1;
+      await new Promise(r => setTimeout(r, 500));
+      const blob = new Blob(chunks, { type: mime });
+      setProgress(100);
+      setResult({ blob, size: blob.size, name: file.name.replace(/\.[^.]+$/, `_${sp}x.webm`) });
+    } catch (err) { setError('Processing failed: ' + err.message); }
+    setProcessing(false);
+  };
+
+  const download = () => {
+    const url = URL.createObjectURL(result.blob);
+    const a = document.createElement('a'); a.href = url; a.download = result.name; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const accentColor = effectiveSpeed < 1 ? '#60a5fa' : '#f97316';
+
+  return (
+    <ToolLayout icon={effectiveSpeed < 1 ? '🐌' : '⚡'} title="Video Speed Controller" category="Basic Video Tools" badgeColor={accentColor}>
+      <div style={{ ...card, background: `rgba(${effectiveSpeed < 1 ? '96,165,250' : '249,115,22'},0.04)`, border: `1px solid rgba(${effectiveSpeed < 1 ? '96,165,250' : '249,115,22'},0.15)` }}>
+        <p style={{ color: '#94a3b8', fontSize: '12.5px', margin: 0 }}>ℹ️ Speeds below 1× create slow motion, speeds above 1× create fast motion. Output is WebM.</p>
+      </div>
+      <div style={card}>
+        <div onDrop={onDrop} onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)}
+          onClick={() => !file && inputRef.current?.click()}
+          style={{ border: `2px dashed ${dragging ? `rgba(${accentColor.slice(1)},0.8)` : `rgba(${accentColor.slice(1)},0.3)`}`, borderRadius: '12px', padding: file ? '16px' : '40px', textAlign: 'center', cursor: file ? 'default' : 'pointer', transition: 'all 0.25s' }}>
+          <input ref={inputRef} type="file" accept="video/*" style={{ display: 'none' }} onChange={e => loadFile(e.target.files[0])} />
+          {file ? (<div>
+            <video ref={videoRef} src={videoSrc} onLoadedMetadata={onMeta} controls style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '8px', display: 'block', margin: '0 auto 12px' }} />
+            <span style={{ fontSize: '12px', color: '#94a3b8' }}>📁 <span style={{ color: accentColor }}>{fmt(file.size)}</span></span>
+            <button onClick={() => { setFile(null); setVideoSrc(null); setResult(null); }} style={{ display: 'block', margin: '10px auto 0', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', borderRadius: '8px', padding: '5px 12px', cursor: 'pointer', fontSize: '12px' }}>Change Video</button>
+          </div>) : (<><div style={{ fontSize: '3.5rem', marginBottom: '12px' }}>⚡</div>
+            <p style={{ color: '#f1f5f9', fontWeight: '600', marginBottom: '6px' }}>Drop your video here</p>
+            <p style={{ color: '#64748b', fontSize: '13px' }}>MP4 · MOV · WEBM · AVI · Click to browse</p></>)}
+        </div>
+      </div>
+      {file && !result && (
+        <div style={card}>
+          <p style={{ color: '#94a3b8', fontSize: '13px', fontWeight: '600', marginBottom: '16px' }}>SELECT SPEED</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '20px' }}>
+            {SPEEDS.map(s => (
+              <button key={s.value} onClick={() => { setSpeed(s.value); setCustom(''); }} style={{ padding: '14px 10px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: speed === s.value && !custom ? 'linear-gradient(135deg,#c2410c,#f97316)' : 'rgba(255,255,255,0.05)', color: speed === s.value && !custom ? '#fff' : '#94a3b8', fontWeight: '700', fontSize: '14px', transition: 'all 0.2s', textAlign: 'center', boxShadow: speed === s.value && !custom ? '0 4px 16px rgba(249,115,22,0.3)' : 'none' }}>
+                <div style={{ fontSize: '1.4rem', marginBottom: '4px' }}>{s.icon}</div>
+                <div>{s.label}</div>
+                <div style={{ fontSize: '10px', opacity: 0.7, fontWeight: '400' }}>{s.desc}</div>
+              </button>
+            ))}
+          </div>
+          <div>
+            <label style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '8px' }}>CUSTOM SPEED (0.1× – 16×)</label>
+            <input type="number" min="0.1" max="16" step="0.1" value={custom} onChange={e => { setCustom(e.target.value); setSpeed(0); }}
+              placeholder="e.g. 1.25" style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#f1f5f9', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+          {meta.duration > 0 && (
+            <div style={{ marginTop: '14px', padding: '12px', background: 'rgba(249,115,22,0.08)', borderRadius: '10px', textAlign: 'center', fontSize: '13px' }}>
+              <span style={{ color: '#94a3b8' }}>Original: </span><span style={{ color: '#f97316', fontWeight: '700' }}>{meta.duration.toFixed(1)}s</span>
+              <span style={{ color: '#94a3b8' }}> → Output: </span><span style={{ color: '#34d399', fontWeight: '700' }}>{(meta.duration / effectiveSpeed).toFixed(1)}s</span>
+              <span style={{ color: '#94a3b8' }}> @ </span><span style={{ color: '#f97316', fontWeight: '700' }}>{effectiveSpeed}×</span>
+            </div>
+          )}
+        </div>
+      )}
+      {file && !result && (
+        <button onClick={handleProcess} disabled={processing} style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', cursor: processing ? 'not-allowed' : 'pointer', background: processing ? 'rgba(255,255,255,0.05)' : 'linear-gradient(135deg,#c2410c,#f97316)', color: '#fff', fontSize: '15px', fontWeight: '700', boxShadow: '0 4px 20px rgba(249,115,22,0.3)', marginBottom: '20px' }}>
+          {processing ? `⏳ Processing… ${progress}%` : `⚡ Apply ${effectiveSpeed}× Speed`}
+        </button>
+      )}
+      {processing && (
+        <div style={{ marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#94a3b8', marginBottom: '8px' }}><span>Encoding at {effectiveSpeed}×…</span><span>{progress}%</span></div>
+          <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '8px', height: '8px', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${progress}%`, background: 'linear-gradient(90deg,#c2410c,#f97316)', borderRadius: '8px', transition: 'width 0.5s' }} />
+          </div>
+        </div>
+      )}
+      {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', padding: '14px', color: '#f87171', marginBottom: '16px' }}>⚠️ {error}</div>}
+      {result && (
+        <div style={{ ...card, border: '1px solid rgba(249,115,22,0.3)' }}>
+          <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+            <div style={{ fontSize: '2rem' }}>✅</div>
+            <p style={{ color: '#34d399', fontWeight: '700', marginTop: '8px' }}>Speed applied at {effectiveSpeed}×!</p>
+            <p style={{ color: '#64748b', fontSize: '13px' }}>{fmt(result.size)}</p>
+          </div>
+          <button onClick={download} style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#059669,#10b981)', color: '#fff', fontSize: '15px', fontWeight: '700', marginBottom: '10px' }}>⬇️ Download Video (.webm)</button>
+          <button onClick={() => setResult(null)} style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#64748b', cursor: 'pointer', fontSize: '13px' }}>Process Another</button>
+        </div>
+      )}
+    </ToolLayout>
+  );
+}
