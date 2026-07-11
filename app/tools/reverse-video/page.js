@@ -6,8 +6,39 @@ const fmt = (b) => b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).t
 const fmtDur = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const card = { background: 'rgba(10,8,28,0.6)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '24px', marginBottom: '20px' };
 
+const getSupportedMimeType = (format) => {
+  const formats = {
+    mp4: [
+      'video/mp4;codecs=h264,aac',
+      'video/mp4;codecs=h264',
+      'video/mp4;codecs=avc1',
+      'video/mp4',
+      'video/webm;codecs=h264'
+    ],
+    mov: [
+      'video/quicktime;codecs=h264',
+      'video/quicktime;codecs=avc1',
+      'video/quicktime',
+      'video/mp4'
+    ],
+    webm: [
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm'
+    ]
+  };
+  const list = formats[format] || [];
+  for (const mime of list) {
+    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(mime)) {
+      return mime;
+    }
+  }
+  return 'video/webm';
+};
+
 export default function ReverseVideo() {
   const [file, setFile] = useState(null);
+  const [exportFormat, setExportFormat] = useState('mp4');
   const [videoSrc, setVideoSrc] = useState(null);
   const [meta, setMeta] = useState({ duration: 0, w: 0, h: 0 });
   const [dragging, setDragging] = useState(false);
@@ -65,7 +96,7 @@ export default function ReverseVideo() {
       const canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
       const ctx = canvas.getContext('2d');
-      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+      const mime = getSupportedMimeType(exportFormat);
       const recorder = new MediaRecorder(canvas.captureStream(fps), { mimeType: mime, videoBitsPerSecond: 3_000_000 });
       const chunks = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
@@ -79,10 +110,10 @@ export default function ReverseVideo() {
       recorder.stop();
       await new Promise(r => setTimeout(r, 500));
 
-      const blob = new Blob(chunks, { type: mime });
+      const blob = new Blob(chunks, { type: exportFormat === 'mp4' ? 'video/mp4' : exportFormat === 'mov' ? 'video/quicktime' : mime });
       setProgress(100);
       setStatus('');
-      setResult({ blob, size: blob.size, name: file.name.replace(/\.[^.]+$/, '_reversed.webm') });
+      setResult({ blob, size: blob.size, name: file.name.replace(/\.[^.]+$/, `_reversed.${exportFormat}`) });
     } catch (err) { setError('Reverse failed: ' + err.message); setStatus(''); }
     setProcessing(false);
   };
@@ -137,7 +168,7 @@ export default function ReverseVideo() {
             <p style={{ color: '#34d399', fontWeight: '700', marginTop: '8px' }}>Video reversed!</p>
             <p style={{ color: '#64748b', fontSize: '13px' }}>{fmt(result.size)}</p>
           </div>
-          <button onClick={download} style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#059669,#10b981)', color: '#fff', fontSize: '15px', fontWeight: '700', marginBottom: '10px' }}>⬇️ Download Reversed Video (.webm)</button>
+          <button onClick={download} style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#059669,#10b981)', color: '#fff', fontSize: '15px', fontWeight: '700', marginBottom: '10px' }}>⬇️ Download Reversed Video (.${exportFormat})</button>
           <button onClick={() => setResult(null)} style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#64748b', cursor: 'pointer', fontSize: '13px' }}>Reverse Another</button>
         </div>
       )}

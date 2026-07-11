@@ -6,9 +6,40 @@ const card = { background: 'rgba(10,8,28,0.6)', backdropFilter: 'blur(20px)', bo
 const fmt = (b) => b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(2) + ' MB';
 const fmtTime = (s) => `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
+const getSupportedMimeType = (format) => {
+  const formats = {
+    mp4: [
+      'video/mp4;codecs=h264,aac',
+      'video/mp4;codecs=h264',
+      'video/mp4;codecs=avc1',
+      'video/mp4',
+      'video/webm;codecs=h264'
+    ],
+    mov: [
+      'video/quicktime;codecs=h264',
+      'video/quicktime;codecs=avc1',
+      'video/quicktime',
+      'video/mp4'
+    ],
+    webm: [
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm'
+    ]
+  };
+  const list = formats[format] || [];
+  for (const mime of list) {
+    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(mime)) {
+      return mime;
+    }
+  }
+  return 'video/webm';
+};
+
 export default function WebcamRecorder() {
   const [active, setActive] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [exportFormat, setExportFormat] = useState('mp4');
   const [paused, setPaused] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [result, setResult] = useState(null);
@@ -40,13 +71,13 @@ export default function WebcamRecorder() {
 
   const startRecording = () => {
     if (!streamRef.current) return;
-    const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' : 'video/webm';
+    const mime = getSupportedMimeType(exportFormat);
     const recorder = new MediaRecorder(streamRef.current, { mimeType: mime, videoBitsPerSecond: 2_500_000 });
     chunksRef.current = [];
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
     recorder.onstop = () => {
       clearInterval(timerRef.current);
-      const blob = new Blob(chunksRef.current, { type: mime });
+      const blob = new Blob(chunksRef.current, { type: exportFormat === 'mp4' ? 'video/mp4' : exportFormat === 'mov' ? 'video/quicktime' : mime });
       setResult({ blob, url: URL.createObjectURL(blob), size: blob.size });
       setRecording(false); setPaused(false); setElapsed(0);
       streamRef.current?.getTracks().forEach(t => t.stop());
@@ -79,7 +110,7 @@ export default function WebcamRecorder() {
 
   const download = () => {
     const a = document.createElement('a');
-    a.href = result.url; a.download = `webcam_${Date.now()}.webm`; a.click();
+    a.href = result.url; a.download = `webcam_${Date.now()}.${exportFormat}`; a.click();
   };
 
   return (
@@ -107,7 +138,15 @@ export default function WebcamRecorder() {
               </select>
             </div>
           </div>
-        </div>
+                  <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '6px' }}>OUTPUT FORMAT</label>
+            <select value={exportFormat} onChange={e => setExportFormat(e.target.value)} style={{ width: '100%', padding: '9px', borderRadius: '8px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#f1f5f9', fontSize: '13px', height: '38px', outline: 'none' }}>
+              <option value="mp4" style={{ color: '#ffffff', backgroundColor: '#121026' }}>MP4 (.mp4)</option>
+              <option value="mov" style={{ color: '#ffffff', backgroundColor: '#121026' }}>MOV (.mov)</option>
+              <option value="webm" style={{ color: '#ffffff', backgroundColor: '#121026' }}>WebM (.webm)</option>
+            </select>
+          </div>
+</div>
       )}
       {!active && !result && (
         <button onClick={startCamera} style={{ width: '100%', padding: '16px', borderRadius: '12px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#059669,#34d399)', color: '#fff', fontSize: '16px', fontWeight: '800', boxShadow: '0 4px 24px rgba(52,211,153,0.4)', marginBottom: '20px' }}>
@@ -149,7 +188,7 @@ export default function WebcamRecorder() {
           <p style={{ color: '#94a3b8', fontSize: '13px', fontWeight: '600', marginBottom: '12px' }}>RECORDING SAVED</p>
           <video src={result.url} controls style={{ width: '100%', borderRadius: '10px', marginBottom: '16px', background: '#000' }} />
           <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '16px', textAlign: 'center' }}>Duration: <strong style={{ color: '#34d399' }}>{fmtTime(elapsed)}</strong> · Size: <strong style={{ color: '#a78bfa' }}>{fmt(result.size)}</strong></p>
-          <button onClick={download} style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#059669,#10b981)', color: '#fff', fontSize: '15px', fontWeight: '700', marginBottom: '10px' }}>⬇️ Download Recording (.webm)</button>
+          <button onClick={download} style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#059669,#10b981)', color: '#fff', fontSize: '15px', fontWeight: '700', marginBottom: '10px' }}>⬇️ Download Recording (.${exportFormat})</button>
           <button onClick={() => { setResult(null); }} style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#64748b', cursor: 'pointer', fontSize: '13px' }}>Record Again</button>
         </div>
       )}

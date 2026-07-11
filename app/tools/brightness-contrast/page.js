@@ -5,8 +5,39 @@ import ToolLayout from '@/app/components/ToolLayout';
 const fmt = (b) => b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : (b / 1048576).toFixed(2) + ' MB';
 const card = { background: 'rgba(10,8,28,0.6)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '24px', marginBottom: '20px' };
 
+const getSupportedMimeType = (format) => {
+  const formats = {
+    mp4: [
+      'video/mp4;codecs=h264,aac',
+      'video/mp4;codecs=h264',
+      'video/mp4;codecs=avc1',
+      'video/mp4',
+      'video/webm;codecs=h264'
+    ],
+    mov: [
+      'video/quicktime;codecs=h264',
+      'video/quicktime;codecs=avc1',
+      'video/quicktime',
+      'video/mp4'
+    ],
+    webm: [
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm'
+    ]
+  };
+  const list = formats[format] || [];
+  for (const mime of list) {
+    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(mime)) {
+      return mime;
+    }
+  }
+  return 'video/webm';
+};
+
 export default function BrightnessContrast() {
   const [file, setFile] = useState(null);
+  const [exportFormat, setExportFormat] = useState('mp4');
   const [videoSrc, setVideoSrc] = useState(null);
   const [meta, setMeta] = useState({ duration: 0, w: 0, h: 0 });
   const [brightness, setBrightness] = useState(100);
@@ -39,7 +70,7 @@ export default function BrightnessContrast() {
       const canvas = document.createElement('canvas');
       canvas.width = meta.w || 1280; canvas.height = meta.h || 720;
       const ctx = canvas.getContext('2d');
-      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+      const mime = getSupportedMimeType(exportFormat);
       const recorder = new MediaRecorder(canvas.captureStream(25), { mimeType: mime, videoBitsPerSecond: 3_000_000 });
       const chunks = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
@@ -64,9 +95,9 @@ export default function BrightnessContrast() {
         recorder.onstop = resolve; recorder.onerror = reject;
       });
       await new Promise(r => setTimeout(r, 500));
-      const blob = new Blob(chunks, { type: mime });
+      const blob = new Blob(chunks, { type: exportFormat === 'mp4' ? 'video/mp4' : exportFormat === 'mov' ? 'video/quicktime' : mime });
       setProgress(100);
-      setResult({ blob, size: blob.size, name: file.name.replace(/\.[^.]+$/, '_adjusted.webm') });
+      setResult({ blob, size: blob.size, name: file.name.replace(/\.[^.]+$/, `_adjusted.${exportFormat}`) });
     } catch (err) { setError('Processing failed: ' + err.message); }
     setProcessing(false);
   };
@@ -121,7 +152,15 @@ export default function BrightnessContrast() {
           <SLIDER label="Brightness" value={brightness} set={setBrightness} min={0} max={200} accent="#fbbf24" icon="☀️" />
           <SLIDER label="Contrast" value={contrast} set={setContrast} min={0} max={200} accent="#f472b6" icon="◑" />
           <SLIDER label="Saturation" value={saturation} set={setSaturation} min={0} max={300} accent="#34d399" icon="🌈" />
-        </div>
+                  <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '6px' }}>OUTPUT FORMAT</label>
+            <select value={exportFormat} onChange={e => setExportFormat(e.target.value)} style={{ width: '100%', padding: '9px', borderRadius: '8px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#f1f5f9', fontSize: '13px', height: '38px', outline: 'none' }}>
+              <option value="mp4" style={{ color: '#ffffff', backgroundColor: '#121026' }}>MP4 (.mp4)</option>
+              <option value="mov" style={{ color: '#ffffff', backgroundColor: '#121026' }}>MOV (.mov)</option>
+              <option value="webm" style={{ color: '#ffffff', backgroundColor: '#121026' }}>WebM (.webm)</option>
+            </select>
+          </div>
+</div>
       )}
       {file && !result && (
         <button onClick={handleProcess} disabled={processing} style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', cursor: processing ? 'not-allowed' : 'pointer', background: processing ? 'rgba(255,255,255,0.05)' : 'linear-gradient(135deg,#b45309,#fbbf24)', color: '#fff', fontSize: '15px', fontWeight: '700', boxShadow: '0 4px 20px rgba(251,191,36,0.3)', marginBottom: '20px' }}>
@@ -144,7 +183,7 @@ export default function BrightnessContrast() {
             <p style={{ color: '#34d399', fontWeight: '700', marginTop: '8px' }}>Adjustments applied!</p>
             <p style={{ color: '#64748b', fontSize: '13px' }}>{fmt(result.size)}</p>
           </div>
-          <button onClick={download} style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#059669,#10b981)', color: '#fff', fontSize: '15px', fontWeight: '700', marginBottom: '10px' }}>⬇️ Download Adjusted Video (.webm)</button>
+          <button onClick={download} style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#059669,#10b981)', color: '#fff', fontSize: '15px', fontWeight: '700', marginBottom: '10px' }}>⬇️ Download Adjusted Video (.${exportFormat})</button>
           <button onClick={() => setResult(null)} style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#64748b', cursor: 'pointer', fontSize: '13px' }}>Adjust Another</button>
         </div>
       )}
