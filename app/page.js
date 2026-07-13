@@ -3182,7 +3182,7 @@ export default function Dashboard() {
           <div style={{ width: '100%', maxWidth: '600px', position: 'relative', display: 'flex', alignItems: 'center', animation: 'fadeIn 0.2s ease-in-out' }}>
             <input
               type="text"
-              placeholder="Search tools — PDF, Image, AI, Video, Utilities..."
+              placeholder="Search"
               value={search}
               onChange={e => setSearch(e.target.value)}
               style={{
@@ -3197,9 +3197,7 @@ export default function Dashboard() {
                 transition: 'all 0.3s'
               }}
             />
-            <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#a78bfa', fontSize: '14px', pointerEvents: 'none' }}>
-              🔍
-            </span>
+          
             {search && (
               <button 
                 onClick={() => setSearch('')}
@@ -3229,7 +3227,7 @@ export default function Dashboard() {
 
             {/* Desktop subtitle */}
             <p className="welcome-subtitle hero-desktop-text" style={{ fontSize: '1.1rem', color: '#94a3b8', marginTop: '16px', lineHeight: '1.6' }}>
-              Convert images, compress files, split PDFs, transform documents, generate code — all running privately in your browser.
+              Convert images, compress files, split PDFs, transform documents, generate code all running privately in your browser.
             </p>
 
             {/* Mobile stats — shown only on small screens */}
@@ -3262,7 +3260,7 @@ export default function Dashboard() {
             <input
               type="text"
               className="dashboard-search-input"
-              placeholder="Search tools — PDF, Image, AI, QR Code, Converter..."
+              placeholder="Search tools : PDF, Image, AI, QR Code, Converter..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               style={{

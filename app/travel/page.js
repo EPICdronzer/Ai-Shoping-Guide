@@ -1079,7 +1079,7 @@ export default function TravelPlanner() {
                       onMouseOver={(e) => e.currentTarget.style.opacity = '0.9'}
                       onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
                     >
-                      {isVehicleSearching ? '⏳...' : '✦ Search'}
+                      {isVehicleSearching ? '⏳' : '✦ Search'}
                     </button>
                   </div>
                 </div>

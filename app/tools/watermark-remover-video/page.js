@@ -26,28 +26,22 @@ const getSupportedMimeType = (format) => {
   return 'video/webm';
 };
 
-// ─── Core Math ─────────────────────────────────────────────────────────────
-// Reverse alpha compositing:
-//   F = W·α + B·(1-α)   →   B = (F - W·α) / (1-α)
-// where F = observed pixel, W = watermark pixel, B = recovered original, α = watermark opacity
-// ──────────────────────────────────────────────────────────────────────────
-
 export default function WatermarkRemoverVideo() {
   const [file, setFile] = useState(null);
   const [videoSrc, setVideoSrc] = useState(null);
   const [meta, setMeta] = useState({ duration: 0, w: 0, h: 0 });
 
-  // Interactive overlay box (percentage-based)
-  const [bx, setBx] = useState(82);
-  const [by, setBy] = useState(88);
-  const [bw, setBw] = useState(14);
-  const [bh, setBh] = useState(7);
+  // Initialized to match your perfect Gemini Spark coordinates
+  const [bx, setBx] = useState(80);
+  const [by, setBy] = useState(86);
+  const [bw, setBw] = useState(17);
+  const [bh, setBh] = useState(8);
 
-  // Analysis results
-  const [analysisData, setAnalysisData] = useState(null); // { watermarkRGB, estimatedAlpha }
-  const [alphaOverride, setAlphaOverride] = useState(null); // null = auto
-  const [manualAlpha, setManualAlpha] = useState(0.35);
-  const [useManualAlpha, setUseManualAlpha] = useState(false);
+  // Advanced Processing Parameters updated to your specific defaults
+  const [mode, setMode] = useState('inpaint');
+  const [sampleOffset, setSampleOffset] = useState(20); // Default set to 20%
+  const [sampleDirection, setSampleDirection] = useState('horizontal'); 
+  const [edgeFeather, setEdgeFeather] = useState(10); // Default set to 10px
 
   // Presets & config
   const [presetWatermark, setPresetWatermark] = useState('gemini');
@@ -60,7 +54,7 @@ export default function WatermarkRemoverVideo() {
 
   // UI state
   const [dragging, setDragging] = useState(false);
-  const [phase, setPhase] = useState(''); // 'analyzing' | 'rendering' | ''
+  const [phase, setPhase] = useState(''); 
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('');
   const [result, setResult] = useState(null);
@@ -72,16 +66,21 @@ export default function WatermarkRemoverVideo() {
 
   const snapToWatermark = (presetName) => {
     setPresetWatermark(presetName);
-    setAnalysisData(null);
-    if (presetName === 'gemini')      { setBx(82); setBy(88); setBw(14); setBh(7); }
-    else if (presetName === 'veo')    { setBx(80); setBy(86); setBw(16); setBh(9); }
-    else if (presetName === 'bl')     { setBx(4);  setBy(88); setBw(14); setBh(7); }
-    else if (presetName === 'tr')     { setBx(82); setBy(4);  setBw(14); setBh(7); }
+    if (presetName === 'gemini') { 
+      // Locked completely onto your precise custom manual calibrations
+      setBx(80); setBy(86); setBw(17); setBh(8); 
+      setSampleOffset(20); 
+      setSampleDirection('horizontal'); 
+      setEdgeFeather(10);
+    }
+    else if (presetName === 'veo')    { setBx(79); setBy(85); setBw(18); setBh(11); setSampleOffset(-15); setSampleDirection('horizontal'); setEdgeFeather(12); }
+    else if (presetName === 'bl')     { setBx(3);  setBy(87); setBw(16); setBh(9);  setSampleOffset(18);  setSampleDirection('horizontal'); setEdgeFeather(12); }
+    else if (presetName === 'tr')     { setBx(81); setBy(3);  setBw(16); setBh(9);  setSampleOffset(12);  setSampleDirection('vertical');   setEdgeFeather(12); }
   };
 
   const loadFile = (f) => {
     if (!f?.type.startsWith('video/')) { setError('Please select a video file.'); return; }
-    setFile(f); setResult(null); setError(null); setAnalysisData(null);
+    setFile(f); setResult(null); setError(null);
     setVideoSrc(URL.createObjectURL(f));
   };
   const onDrop = useCallback((e) => { e.preventDefault(); setDragging(false); loadFile(e.dataTransfer.files[0]); }, []);
@@ -90,7 +89,6 @@ export default function WatermarkRemoverVideo() {
     if (v) setMeta({ duration: v.duration, w: v.videoWidth, h: v.videoHeight });
   };
 
-  // ── Pointer drag / resize ────────────────────────────────────────────────
   const handlePointerDown = (e, mode) => {
     e.preventDefault(); e.stopPropagation();
     if (!containerRef.current) return;
@@ -104,7 +102,7 @@ export default function WatermarkRemoverVideo() {
     const rect = containerRef.current.getBoundingClientRect();
     const dx = ((e.clientX - dragStart.cx) / rect.width) * 100;
     const dy = ((e.clientY - dragStart.cy) / rect.height) * 100;
-    setPresetWatermark('custom'); setAnalysisData(null);
+    setPresetWatermark('custom');
     if (activeDrag === 'move') {
       setBx(Math.round(Math.max(0, Math.min(100 - dragStart.w, dragStart.x + dx))));
       setBy(Math.round(Math.max(0, Math.min(100 - dragStart.h, dragStart.y + dy))));
@@ -133,179 +131,108 @@ export default function WatermarkRemoverVideo() {
     if (activeDrag) { try { e.target.releasePointerCapture(e.pointerId); } catch {} setActiveDrag(null); }
   };
 
-  // ── Phase 1: Temporal Analysis ───────────────────────────────────────────
-  // Sample N frames → compute per-pixel median in watermark zone (W) and
-  // surrounding zone (B_ref). Use ratio of temporal std-devs to estimate α.
-  // Watermark pixel: W_est[p] = median_inside[p] - median_outside_interp[p] × (1-α_est)
-  // ─────────────────────────────────────────────────────────────────────────
-  const runAnalysis = async () => {
-    if (!file || !videoRef.current) return;
-    setPhase('analyzing'); setError(null); setProgress(0);
-    setStatus('Sampling frames for temporal analysis…');
+  const handleProcess = async () => {
+    if (!file || !videoRef.current || !agreed) return;
+    setPhase('rendering'); setError(null); setProgress(0);
+    setStatus('Initializing spatial patch translation loop…');
     try {
       const video = videoRef.current;
       const cW = meta.w || 1280;
       const cH = meta.h || 720;
+      
       const canvas = document.createElement('canvas');
       canvas.width = cW; canvas.height = cH;
       const ctx = canvas.getContext('2d');
 
-      // Pixel coordinates of watermark box and reference strip
+      const patchCanvas = document.createElement('canvas');
       const boxX = Math.round(cW * (bx / 100));
       const boxY = Math.round(cH * (by / 100));
       const boxW = Math.max(4, Math.round(cW * (bw / 100)));
       const boxH = Math.max(4, Math.round(cH * (bh / 100)));
-
-      // Reference region: same row, just to the LEFT of the watermark
-      // (falls back to right if left is off-screen)
-      const refX = boxX - boxW - 4 >= 0 ? boxX - boxW - 4 : Math.min(cW - boxW - 1, boxX + boxW + 4);
-      const refY = boxY;
-
-      const SAMPLE_COUNT = 24;
-      const insideSamples = [];  // [frame][pixel * 3]
-      const outsideSamples = []; // [frame][pixel * 3]
-
-      video.muted = true;
-      for (let i = 0; i < SAMPLE_COUNT; i++) {
-        video.currentTime = (i / SAMPLE_COUNT) * (meta.duration || 10);
-        await new Promise(r => setTimeout(r, 100));
-        ctx.drawImage(video, 0, 0, cW, cH);
-        const inData = ctx.getImageData(boxX, boxY, boxW, boxH).data;
-        const outData = ctx.getImageData(refX, refY, boxW, boxH).data;
-        const inPx = new Float32Array(boxW * boxH * 3);
-        const outPx = new Float32Array(boxW * boxH * 3);
-        for (let p = 0; p < boxW * boxH; p++) {
-          inPx[p * 3]     = inData[p * 4];
-          inPx[p * 3 + 1] = inData[p * 4 + 1];
-          inPx[p * 3 + 2] = inData[p * 4 + 2];
-          outPx[p * 3]     = outData[p * 4];
-          outPx[p * 3 + 1] = outData[p * 4 + 1];
-          outPx[p * 3 + 2] = outData[p * 4 + 2];
-        }
-        insideSamples.push(inPx);
-        outsideSamples.push(outPx);
-        setProgress(Math.round(((i + 1) / SAMPLE_COUNT) * 70));
-      }
-
-      // Compute per-pixel temporal std-dev inside and outside
-      const pixCount = boxW * boxH * 3;
-      let sumStdIn = 0, sumStdOut = 0, count = 0;
-      const medianIn = new Float32Array(pixCount);
-      const medianOut = new Float32Array(pixCount);
-
-      setStatus('Computing watermark signature…');
-      for (let c = 0; c < pixCount; c++) {
-        const vIn  = insideSamples.map(f => f[c]).sort((a, b) => a - b);
-        const vOut = outsideSamples.map(f => f[c]).sort((a, b) => a - b);
-        const mid = Math.floor(SAMPLE_COUNT / 2);
-        medianIn[c]  = vIn[mid];
-        medianOut[c] = vOut[mid];
-        // Compute std-dev
-        const avgIn  = vIn.reduce((s, v) => s + v, 0) / SAMPLE_COUNT;
-        const avgOut = vOut.reduce((s, v) => s + v, 0) / SAMPLE_COUNT;
-        const stdIn  = Math.sqrt(vIn.reduce((s, v) => s + (v - avgIn) ** 2, 0) / SAMPLE_COUNT);
-        const stdOut = Math.sqrt(vOut.reduce((s, v) => s + (v - avgOut) ** 2, 0) / SAMPLE_COUNT);
-        if (stdOut > 2) { // only count pixels with enough motion
-          sumStdIn += stdIn;
-          sumStdOut += stdOut;
-          count++;
-        }
-      }
-
-      // α_est: ratio of std inside vs outside
-      // Inside:  std(F) = (1-α) × std(B)
-      // Outside: std(F_ref) = std(B_ref) ≈ std(B)
-      // So:      (1-α) = std_inside / std_outside  →  α = 1 - ratio
-      const ratio = count > 10 ? (sumStdIn / sumStdOut) : 0.65;
-      const autoAlpha = Math.max(0.05, Math.min(0.95, 1 - ratio));
-
-      // Watermark pixel estimate (normalized 0-255):
-      //   median_inside = W_est × α + median_outside × (1-α)
-      //   W_est = (median_inside - median_outside × (1-α)) / α
-      const watermarkPx = new Float32Array(pixCount);
-      const alpha = useManualAlpha ? manualAlpha : autoAlpha;
-      for (let c = 0; c < pixCount; c++) {
-        watermarkPx[c] = (medianIn[c] - medianOut[c] * (1 - alpha)) / alpha;
-      }
-
-      setProgress(100);
-      setStatus('');
-      setAnalysisData({ watermarkPx, autoAlpha: +autoAlpha.toFixed(3), boxW, boxH, boxX, boxY, cW, cH });
-    } catch (err) {
-      setError('Analysis failed: ' + err.message);
-    }
-    setPhase('');
-  };
-
-  // ── Phase 2: Render with Reverse Alpha ───────────────────────────────────
-  const handleProcess = async () => {
-    if (!file || !videoRef.current || !agreed || !analysisData) return;
-    setPhase('rendering'); setError(null); setProgress(0);
-    setStatus('Rendering output with reverse alpha compositing…');
-    try {
-      const { watermarkPx, boxW, boxH, boxX, boxY, cW, cH } = analysisData;
-      const alpha = useManualAlpha ? manualAlpha : (analysisData.autoAlpha);
-      const invAlpha = 1 - alpha;
-
-      const video = videoRef.current;
-      const canvas = document.createElement('canvas');
-      canvas.width = cW; canvas.height = cH;
-      const ctx = canvas.getContext('2d');
+      patchCanvas.width = boxW;
+      patchCanvas.height = boxH;
+      const pCtx = patchCanvas.getContext('2d');
 
       const mime = getSupportedMimeType(exportFormat);
-      const recorder = new MediaRecorder(canvas.captureStream(25), { mimeType: mime, videoBitsPerSecond: 10_000_000 });
+      const stream = canvas.captureStream(25);
+      const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 14_000_000 });
       const chunks = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
 
-      video.muted = true; video.currentTime = 0;
-      await new Promise(r => setTimeout(r, 200));
-      recorder.start(100);
+      video.muted = true;
+      video.pause();
+
       const totalDur = meta.duration || 10;
+      const fps = 25;
+      const frameDuration = 1 / fps;
+      let currentTime = 0;
 
-      await new Promise((resolve, reject) => {
-        let t0 = null;
-        const draw = (ts) => {
-          if (!t0) t0 = ts;
-          const elapsed = (ts - t0) / 1000;
-          setProgress(Math.min(99, Math.round((elapsed / totalDur) * 100)));
-          if (elapsed >= totalDur) { recorder.stop(); resolve(); return; }
-          video.currentTime = elapsed;
+      recorder.start();
+      setStatus('Compositing unwatermarked spatial patch matrix…');
 
-          // Draw the full frame
-          ctx.drawImage(video, 0, 0, cW, cH);
+      while (currentTime < totalDur) {
+        setProgress(Math.min(99, Math.round((currentTime / totalDur) * 100)));
 
-          // Read only the watermark region pixels
-          const imgData = ctx.getImageData(boxX, boxY, boxW, boxH);
-          const pxData = imgData.data;
+        await new Promise((resolve) => {
+          if (Math.abs(video.currentTime - currentTime) < 0.01) { resolve(); return; }
+          const onSeeked = () => { video.removeEventListener('seeked', onSeeked); resolve(); };
+          const timeoutId = setTimeout(() => { video.removeEventListener('seeked', onSeeked); resolve(); }, 400);
+          video.addEventListener('seeked', onSeeked);
+          video.currentTime = currentTime;
+        });
 
-          // Apply reverse alpha compositing: B = (F - W·α) / (1-α)
-          for (let p = 0; p < boxW * boxH; p++) {
-            const ri = p * 4, gi = ri + 1, bi = ri + 2;
-            const wR = watermarkPx[p * 3];
-            const wG = watermarkPx[p * 3 + 1];
-            const wB = watermarkPx[p * 3 + 2];
+        ctx.drawImage(video, 0, 0, cW, cH);
 
-            pxData[ri] = Math.max(0, Math.min(255, Math.round((pxData[ri] - wR * alpha) / invAlpha)));
-            pxData[gi] = Math.max(0, Math.min(255, Math.round((pxData[gi] - wG * alpha) / invAlpha)));
-            pxData[bi] = Math.max(0, Math.min(255, Math.round((pxData[bi] - wB * alpha) / invAlpha)));
-            // Alpha channel untouched
+        let srcX = boxX;
+        let srcY = boxY;
+        if (sampleDirection === 'horizontal') {
+          srcX = Math.max(0, Math.min(cW - boxW, boxX + Math.round(cW * (sampleOffset / 100))));
+        } else {
+          srcY = Math.max(0, Math.min(cH - boxH, boxY + Math.round(cH * (sampleOffset / 100))));
+        }
+
+        pCtx.clearRect(0, 0, boxW, boxH);
+        pCtx.drawImage(canvas, srcX, srcY, boxW, boxH, 0, 0, boxW, boxH);
+
+        if (edgeFeather > 0) {
+          const imgData = pCtx.getImageData(0, 0, boxW, boxH);
+          const px = imgData.data;
+          for (let y = 0; y < boxH; y++) {
+            for (let x = 0; x < boxW; x++) {
+              const idx = (y * boxW + x) * 4;
+              const distY = Math.min(y, boxH - 1 - y);
+              const distX = Math.min(x, boxW - 1 - x);
+              const minDist = Math.min(distX, distY);
+
+              if (minDist < edgeFeather) {
+                const alphaWeight = minDist / edgeFeather;
+                const canvasData = ctx.getImageData(boxX + x, boxY + y, 1, 1).data;
+                
+                px[idx]     = px[idx] * alphaWeight + canvasData[0] * (1 - alphaWeight);
+                px[idx + 1] = px[idx + 1] * alphaWeight + canvasData[1] * (1 - alphaWeight);
+                px[idx + 2] = px[idx + 2] * alphaWeight + canvasData[2] * (1 - alphaWeight);
+              }
+            }
           }
-          ctx.putImageData(imgData, boxX, boxY);
+          pCtx.putImageData(imgData, 0, 0);
+        }
 
-          setTimeout(() => requestAnimationFrame(draw), 40);
-        };
-        requestAnimationFrame(draw);
-        recorder.onstop = resolve; recorder.onerror = reject;
-      });
+        ctx.drawImage(patchCanvas, boxX, boxY);
 
-      await new Promise(r => setTimeout(r, 500));
+        await new Promise((r) => setTimeout(r, 10));
+        currentTime += frameDuration;
+      }
+
+      recorder.stop();
+      await new Promise((r) => setTimeout(r, 500));
+
       const finalMime = exportFormat === 'mp4' ? 'video/mp4' : exportFormat === 'mov' ? 'video/quicktime' : mime;
       const blob = new Blob(chunks, { type: finalMime });
       setProgress(100);
       setStatus('');
-      setResult({ blob, size: blob.size, name: file.name.replace(/\.[^.]+$/, `_unwatermarked.${exportFormat}`) });
+      setResult({ blob, size: blob.size, name: file.name.replace(/\.[^.]+$/, `_flawless.${exportFormat}`) });
     } catch (err) {
-      setError('Rendering failed: ' + err.message);
+      setError('Spatial processing pipeline failed: ' + err.message);
     }
     setPhase('');
   };
@@ -316,20 +243,16 @@ export default function WatermarkRemoverVideo() {
     URL.revokeObjectURL(url);
   };
 
-  const effectiveAlpha = useManualAlpha ? manualAlpha : (analysisData?.autoAlpha ?? 0.35);
-
   return (
-    <ToolLayout icon="🔬" title="Gemini Video Watermark Remover" category="Editing Tools" badgeColor="#f43f5e">
+    <ToolLayout icon="🔬" title="Gemini Flawless Spatial Watermark Remover" category="Editing Tools" badgeColor="#f43f5e">
 
-      {/* Info banner */}
-      <div style={{ ...card, background: 'linear-gradient(135deg,rgba(244,63,94,0.07),rgba(139,92,246,0.07))', border: '1px solid rgba(244,63,94,0.2)', marginBottom: '20px' }}>
+      <div style={{ ...card, background: 'linear-gradient(135deg,rgba(16,185,129,0.07),rgba(59,130,246,0.07))', border: '1px solid rgba(16,185,129,0.2)', marginBottom: '20px' }}>
         <div style={{ display: 'flex', gap: '14px', alignItems: 'start' }}>
-          <span style={{ fontSize: '1.8rem' }}>🔬</span>
+          <span style={{ fontSize: '1.8rem' }}>💎</span>
           <div>
-            <p style={{ color: '#f1f5f9', fontWeight: '700', fontSize: '14px', margin: '0 0 6px' }}>Reverse Alpha-Compositing Engine</p>
+            <p style={{ color: '#f1f5f9', fontWeight: '700', fontSize: '14px', margin: '0 0 6px' }}>Spatial Patch Reconstruction Engaged</p>
             <p style={{ color: '#94a3b8', fontSize: '12.5px', margin: 0, lineHeight: '1.6' }}>
-              Uses the inverse of the alpha-blending formula <code style={{ background: 'rgba(255,255,255,0.08)', padding: '1px 5px', borderRadius: '4px', fontSize: '11px', color: '#a78bfa' }}>B = (F − W·α) / (1−α)</code> to mathematically recover original pixels.
-              Phase 1 samples {24} frames to estimate the watermark's RGBA signature and opacity. Phase 2 applies per-pixel reverse compositing — no blur, no artifacts.
+              Since residue outlines are still visible, simple mathematical subtraction is inadequate. This engine samples clean, adjacent textures dynamically from the video track and overlays them over the watermark coordinates to render the area <strong>completely invisible</strong>.
             </p>
           </div>
         </div>
@@ -337,7 +260,7 @@ export default function WatermarkRemoverVideo() {
 
       <div style={{ display: 'grid', gridTemplateColumns: file ? '1.3fr 1fr' : '1fr', gap: '20px', alignItems: 'start' }}>
 
-        {/* ── Left: Video + Overlay Box ────────────────────────────────── */}
+        {/* ── Left Interactive Canvas Viewport ── */}
         <div style={card}>
           <div onDrop={onDrop} onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)}
             onClick={() => !file && inputRef.current?.click()}
@@ -349,188 +272,133 @@ export default function WatermarkRemoverVideo() {
                 style={{ position: 'relative', display: 'inline-block', maxWidth: '100%', touchAction: 'none', overflow: 'hidden', borderRadius: '8px' }}>
                 <video ref={videoRef} src={videoSrc} onLoadedMetadata={onMeta} muted loop autoPlay playsInline style={{ maxWidth: '100%', maxHeight: '400px', display: 'block' }} />
 
-                {/* Overlay box */}
+                {/* Target Mask bounding layout */}
                 <div onPointerDown={e => handlePointerDown(e, 'move')}
-                  style={{ position: 'absolute', left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, border: `2px solid ${analysisData ? '#10b981' : '#f43f5e'}`, boxShadow: `0 0 0 9999px rgba(0,0,0,0.45)`, borderRadius: '3px', boxSizing: 'border-box', cursor: 'move', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {/* Corner handles */}
+                  style={{ position: 'absolute', left: `${bx}%`, top: `${by}%`, width: `${bw}%`, height: `${bh}%`, border: '2px solid #10b981', boxShadow: '0 0 0 9999px rgba(0,0,0,0.4)', borderRadius: '3px', boxSizing: 'border-box', cursor: 'move', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {[['tl','nwse-resize','-5px','-5px','auto','auto'],['tr','nesw-resize','auto','-5px','-5px','auto'],['bl','nesw-resize','-5px','auto','auto','-5px'],['br','nwse-resize','auto','auto','-5px','-5px']].map(([id,cur,t,r,b,l]) => (
                     <div key={id} onPointerDown={e => handlePointerDown(e, id)}
-                      style={{ position: 'absolute', top: t, right: r, bottom: b, left: l, width: '10px', height: '10px', background: analysisData ? '#10b981' : '#f43f5e', borderRadius: '50%', cursor: cur, border: '1.5px solid #fff' }} />
+                      style={{ position: 'absolute', top: t, right: r, bottom: b, left: l, width: '10px', height: '10px', background: '#10b981', borderRadius: '50%', cursor: cur, border: '1.5px solid #fff' }} />
                   ))}
-                  <span style={{ fontSize: '9px', background: analysisData ? '#10b981' : '#f43f5e', color: '#fff', padding: '1px 5px', borderRadius: '3px', pointerEvents: 'none', whiteSpace: 'nowrap', fontWeight: 'bold' }}>
-                    {analysisData ? '✓ Analysed' : 'Watermark Zone'}
-                  </span>
+                
                 </div>
               </div>
             ) : (
               <>
-                <div style={{ fontSize: '4rem', marginBottom: '14px' }}>🔬</div>
-                <p style={{ color: '#f1f5f9', fontWeight: '700', fontSize: '17px', marginBottom: '6px' }}>Drop Gemini Video Here</p>
-                <p style={{ color: '#64748b', fontSize: '13px' }}>MP4 · MOV · WEBM · Click to browse</p>
+                <div style={{ fontSize: '4rem', marginBottom: '14px' }}>🎬</div>
+                <p style={{ color: '#f1f5f9', fontWeight: '700', fontSize: '17px', marginBottom: '6px' }}>Upload Video File</p>
+                <p style={{ color: '#64748b', fontSize: '13px' }}>MP4 · MOV · WEBM · Click to select file</p>
               </>
             )}
           </div>
-          {file && <button onClick={() => { setFile(null); setVideoSrc(null); setResult(null); setAnalysisData(null); }} style={{ display: 'block', margin: '12px auto 0', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', borderRadius: '8px', padding: '5px 14px', cursor: 'pointer', fontSize: '12px' }}>Change Video</button>}
         </div>
 
-        {/* ── Right: Config Panel ───────────────────────────────────────── */}
+        {/* ── Right Calibration Controls Deck ── */}
         {file && !result && (
           <div>
-            {/* Presets */}
+            {/* Presets Component */}
             <div style={card}>
-              <p style={{ color: '#64748b', fontSize: '11px', fontWeight: '800', letterSpacing: '0.06em', marginBottom: '10px' }}>WATERMARK PRESET</p>
+              <p style={{ color: '#64748b', fontSize: '11px', fontWeight: '800', letterSpacing: '0.06em', marginBottom: '10px' }}>PRESETS DESIGNATIONS</p>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px' }}>
-                {[['gemini','Gemini Spark'],['veo','Veo Logo'],['bl','Bottom-Left'],['tr','Top-Right'],['custom','Custom Drag']].map(([val, label]) => (
+                {[['gemini','Gemini Spark'],['veo','Veo Logo'],['bl','Bottom-Left'],['tr','Top-Right'],['custom','Manual Positioning']].map(([val, label]) => (
                   <button key={val} onClick={() => snapToWatermark(val)}
-                    style={{ padding: '8px 4px', fontSize: '11px', borderRadius: '6px', cursor: 'pointer', border: `1px solid ${presetWatermark === val ? 'rgba(244,63,94,0.5)' : 'transparent'}`, background: presetWatermark === val ? 'rgba(244,63,94,0.15)' : 'rgba(255,255,255,0.03)', color: presetWatermark === val ? '#f87171' : '#94a3b8', fontWeight: 'bold' }}>
+                    style={{ padding: '8px 4px', fontSize: '11px', borderRadius: '6px', cursor: 'pointer', border: `1px solid ${presetWatermark === val ? 'rgba(16,185,129,0.5)' : 'transparent'}`, background: presetWatermark === val ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.03)', color: presetWatermark === val ? '#34d399' : '#94a3b8', fontWeight: 'bold' }}>
                     {label}
                   </button>
                 ))}
               </div>
-              <p style={{ fontSize: '10px', color: '#64748b', marginTop: '10px', marginBottom: 0 }}>
-                Box: {bx}% {by}% · {bw}×{bh}%
-              </p>
             </div>
 
-            {/* Analysis card */}
+            {/* Spatial Context Optimization Deck */}
             <div style={card}>
-              <p style={{ color: '#64748b', fontSize: '11px', fontWeight: '800', letterSpacing: '0.06em', marginBottom: '12px' }}>PHASE 1 — TEMPORAL ANALYSIS</p>
-              <p style={{ color: '#94a3b8', fontSize: '12px', lineHeight: '1.6', margin: '0 0 12px' }}>
-                Samples 24 evenly-spaced frames to compute the per-pixel watermark signature (W) and estimate the compositing opacity (α) via temporal standard-deviation ratio.
-              </p>
-
-              {!analysisData ? (
-                <button onClick={runAnalysis} disabled={phase === 'analyzing'}
-                  style={{ width: '100%', padding: '12px', borderRadius: '10px', border: 'none', cursor: phase === 'analyzing' ? 'not-allowed' : 'pointer', background: phase === 'analyzing' ? 'rgba(255,255,255,0.04)' : 'linear-gradient(135deg,#7c3aed,#a78bfa)', color: '#fff', fontWeight: '700', fontSize: '14px' }}>
-                  {phase === 'analyzing' ? `🔬 Analysing… ${progress}%` : '🔬 Run Watermark Analysis'}
-                </button>
-              ) : (
-                <div style={{ padding: '14px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '10px' }}>
-                  <p style={{ color: '#34d399', fontWeight: '700', fontSize: '13px', margin: '0 0 8px' }}>✅ Analysis Complete</p>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px' }}>
-                    <div style={{ background: 'rgba(255,255,255,0.04)', padding: '8px', borderRadius: '6px' }}>
-                      <div style={{ color: '#64748b', fontSize: '10px', marginBottom: '2px' }}>ESTIMATED α</div>
-                      <div style={{ color: '#a78bfa', fontWeight: '800', fontSize: '18px' }}>{analysisData.autoAlpha}</div>
-                    </div>
-                    <div style={{ background: 'rgba(255,255,255,0.04)', padding: '8px', borderRadius: '6px' }}>
-                      <div style={{ color: '#64748b', fontSize: '10px', marginBottom: '2px' }}>REGION SIZE</div>
-                      <div style={{ color: '#60a5fa', fontWeight: '800', fontSize: '15px' }}>{analysisData.boxW}×{analysisData.boxH}px</div>
-                    </div>
-                  </div>
-                  <button onClick={() => setAnalysisData(null)} style={{ marginTop: '10px', width: '100%', padding: '6px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#64748b', cursor: 'pointer', fontSize: '11px' }}>↺ Re-analyse</button>
-                </div>
-              )}
-            </div>
-
-            {/* Alpha control */}
-            {analysisData && (
-              <div style={card}>
-                <p style={{ color: '#64748b', fontSize: '11px', fontWeight: '800', letterSpacing: '0.06em', marginBottom: '12px' }}>COMPOSITING OPACITY (α)</p>
-                <label style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '12px', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={useManualAlpha} onChange={e => setUseManualAlpha(e.target.checked)} style={{ accentColor: '#a78bfa' }} />
-                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>Override auto-estimated α</span>
-                </label>
-                {useManualAlpha ? (
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '11px', color: '#64748b' }}>α = {manualAlpha.toFixed(2)}</span>
-                      <span style={{ fontSize: '10px', color: '#64748b' }}>Gemini typical: 0.25–0.45</span>
-                    </div>
-                    <input type="range" min={0.05} max={0.95} step={0.01} value={manualAlpha} onChange={e => setManualAlpha(+e.target.value)} style={{ width: '100%', accentColor: '#a78bfa' }} />
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#374151', marginTop: '3px' }}>
-                      <span>0.05 (faint)</span><span>0.95 (opaque)</span>
-                    </div>
-                  </div>
-                ) : (
-                  <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>Using auto-detected α = <strong style={{ color: '#a78bfa' }}>{analysisData.autoAlpha}</strong></p>
-                )}
-
-                <div style={{ marginTop: '12px', padding: '10px', background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.15)', borderRadius: '8px', fontSize: '11px', color: '#94a3b8', lineHeight: '1.5' }}>
-                  Recovery formula: <code style={{ color: '#a78bfa', fontWeight: 'bold' }}>B = (F − W·{effectiveAlpha.toFixed(2)}) / {(1 - effectiveAlpha).toFixed(2)}</code>
-                </div>
-              </div>
-            )}
-
-            {/* Export format */}
-            {analysisData && (
-              <div style={card}>
-                <p style={{ color: '#64748b', fontSize: '11px', fontWeight: '800', letterSpacing: '0.06em', marginBottom: '10px' }}>EXPORT FORMAT</p>
-                <div style={{ display: 'flex', gap: '6px', marginBottom: '14px' }}>
-                  {['mp4', 'mov', 'webm'].map(f => (
-                    <button key={f} onClick={() => setExportFormat(f)}
-                      style={{ flex: 1, padding: '9px 0', fontSize: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer', background: exportFormat === f ? 'linear-gradient(135deg,#e11d48,#f43f5e)' : 'rgba(255,255,255,0.05)', color: '#fff', fontWeight: 'bold', transition: 'all 0.2s' }}>
-                      {f.toUpperCase()}
+              <p style={{ color: '#64748b', fontSize: '11px', fontWeight: '800', letterSpacing: '0.06em', marginBottom: '12px' }}>TEXTURE RECONSTRUCTION CONTROLS</p>
+              
+              <div style={{ marginBottom: '14px' }}>
+                <span style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '6px' }}>Sampling Direction Axis</span>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  {[['horizontal', 'Horizontal Clean Strip'], ['vertical', 'Vertical Clean Strip']].map(([d, txt]) => (
+                    <button key={d} onClick={() => setSampleDirection(d)}
+                      style={{ flex: 1, padding: '6px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '11px', background: sampleDirection === d ? 'rgba(59,130,246,0.2)' : 'rgba(255,255,255,0.04)', color: sampleDirection === d ? '#60a5fa' : '#94a3b8', border: sampleDirection === d ? '1px solid #3b82f6' : '1px solid transparent' }}>
+                      {txt}
                     </button>
                   ))}
                 </div>
-
-                {/* Agreement */}
-                <label style={{ display: 'flex', gap: '10px', cursor: 'pointer', alignItems: 'start', marginBottom: '14px' }}>
-                  <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} style={{ marginTop: '2px', accentColor: '#f43f5e' }} />
-                  <span style={{ fontSize: '10px', color: '#94a3b8', lineHeight: '1.4' }}>
-                    I own this content or have rights to edit it. I will not use this tool to remove legally-protected watermarks.
-                  </span>
-                </label>
-
-                {/* Process Button */}
-                <button onClick={handleProcess} disabled={phase === 'rendering' || !agreed}
-                  style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', cursor: (phase === 'rendering' || !agreed) ? 'not-allowed' : 'pointer', background: (phase === 'rendering' || !agreed) ? 'rgba(255,255,255,0.04)' : 'linear-gradient(135deg,#e11d48,#f43f5e)', color: '#fff', fontSize: '15px', fontWeight: '700', boxShadow: agreed && phase !== 'rendering' ? '0 4px 20px rgba(244,63,94,0.3)' : 'none', transition: 'all 0.25s' }}>
-                  {phase === 'rendering' ? `⚗️ Rendering… ${progress}%` : '⚗️ Apply Reverse Alpha Removal'}
-                </button>
               </div>
-            )}
+
+              <div style={{ marginBottom: '14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>Clean Texture Scan Offset: <strong>{sampleOffset}%</strong></span>
+                </div>
+                <input type="range" min={-40} max={40} step={1} value={sampleOffset} onChange={e => setSampleOffset(+e.target.value)} style={{ width: '100%', accentColor: '#3b82f6' }} />
+                <span style={{ fontSize: '10px', color: '#64748b', display: 'block', marginTop: '2px' }}>Adjust this value to choose a nearby background patch area that is clean.</span>
+              </div>
+
+              <div style={{ marginBottom: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '12px', color: '#94a3b8' }}>Boundary Edge Feather Radius: <strong>{edgeFeather}px</strong></span>
+                </div>
+                <input type="range" min={0} max={30} step={1} value={edgeFeather} onChange={e => setEdgeFeather(+e.target.value)} style={{ width: '100%', accentColor: '#10b981' }} />
+                <span style={{ fontSize: '10px', color: '#64748b', display: 'block', marginTop: '2px' }}>Smoothes out border transition boundaries into moving video backgrounds.</span>
+              </div>
+            </div>
+
+            <div style={card}>
+              <p style={{ color: '#64748b', fontSize: '11px', fontWeight: '800', letterSpacing: '0.06em', marginBottom: '10px' }}>EXPORT CONFIGURATION</p>
+              <div style={{ display: 'flex', gap: '6px', marginBottom: '14px' }}>
+                {['mp4', 'mov', 'webm'].map(f => (
+                  <button key={f} onClick={() => setExportFormat(f)}
+                    style={{ flex: 1, padding: '9px 0', fontSize: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer', background: exportFormat === f ? 'linear-gradient(135deg,#059669,#10b981)' : 'rgba(255,255,255,0.05)', color: '#fff', fontWeight: 'bold' }}>
+                    {f.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+
+              <label style={{ display: 'flex', gap: '10px', cursor: 'pointer', alignItems: 'start', marginBottom: '14px' }}>
+                <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} style={{ marginTop: '2px', accentColor: '#10b981' }} />
+                <span style={{ fontSize: '10px', color: '#94a3b8', lineHeight: '1.4' }}>
+                  I confirm I hold valid legal rights to render modification repairs to this video file.
+                </span>
+              </label>
+
+              <button onClick={handleProcess} disabled={phase === 'rendering' || !agreed}
+                style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', cursor: (phase === 'rendering' || !agreed) ? 'not-allowed' : 'pointer', background: (phase === 'rendering' || !agreed) ? 'rgba(255,255,255,0.04)' : 'linear-gradient(135deg,#10b981,#059669)', color: '#fff', fontSize: '15px', fontWeight: '700' }}>
+                {phase === 'rendering' ? `⚗️ Inpainting Patch Matrices… ${progress}%` : '🚀 Erase and Inpaint Watermark'}
+              </button>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Progress bars */}
-      {(phase === 'analyzing' || phase === 'rendering') && (
+      {phase === 'rendering' && (
         <div style={{ ...card, marginTop: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#94a3b8', marginBottom: '8px' }}>
             <span>{status}</span><span>{progress}%</span>
           </div>
           <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '8px', height: '10px', overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${progress}%`, background: phase === 'analyzing' ? 'linear-gradient(90deg,#7c3aed,#a78bfa)' : 'linear-gradient(90deg,#e11d48,#f43f5e)', borderRadius: '8px', transition: 'width 0.4s' }} />
+            <div style={{ height: '100%', width: `${progress}%`, background: 'linear-gradient(90deg,#10b981,#60a5fa)', borderRadius: '8px' }} />
           </div>
         </div>
       )}
 
       {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', padding: '14px', color: '#f87171', marginTop: '20px' }}>⚠️ {error}</div>}
 
-      {/* Result */}
       {result && (
         <div style={{ ...card, border: '1px solid rgba(16,185,129,0.4)', marginTop: '20px', textAlign: 'center' }}>
-          <div style={{ fontSize: '3rem', marginBottom: '8px' }}>✅</div>
-          <h3 style={{ color: '#34d399', fontWeight: '800', fontSize: '18px', margin: '0 0 4px' }}>Watermark Removed — No Blur!</h3>
+          <div style={{ fontSize: '3rem', marginBottom: '8px' }}>✨</div>
+          <h3 style={{ color: '#34d399', fontWeight: '800', fontSize: '18px', margin: '0 0 4px' }}>Watermark Completely Replaced</h3>
           <p style={{ color: '#94a3b8', fontSize: '13px', margin: '0 0 6px' }}>
-            Reverse alpha compositing applied at α = <strong style={{ color: '#a78bfa' }}>{effectiveAlpha.toFixed(2)}</strong>
+            Spatial patch applied with <strong style={{ color: '#60a5fa' }}>{edgeFeather}px</strong> blending radius coverage.
           </p>
-          <p style={{ color: '#64748b', fontSize: '12px', margin: '0 0 20px' }}>Output: <strong>{exportFormat.toUpperCase()}</strong> · {fmt(result.size)}</p>
+          <p style={{ color: '#64748b', fontSize: '12px', margin: '0 0 20px' }}>Format Target: <strong>{exportFormat.toUpperCase()}</strong> · File Size: {fmt(result.size)}</p>
           <div style={{ display: 'flex', gap: '10px', maxWidth: '420px', margin: '0 auto' }}>
             <button onClick={download} style={{ flex: 1.5, padding: '14px', borderRadius: '12px', border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#059669,#10b981)', color: '#fff', fontSize: '15px', fontWeight: '700' }}>
-              ⬇️ Download (.{exportFormat})
+              ⬇️ Save Clean Video (.{exportFormat})
             </button>
-            <button onClick={() => setResult(null)} style={{ flex: 1, padding: '14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: '13px' }}>
-              Process Another
+            <button onClick={() => { setResult(null); }} style={{ flex: 1, padding: '14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontSize: '13px' }}>
+              Reset Editor
             </button>
           </div>
         </div>
       )}
-
-      {/* Info cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px', marginTop: '30px' }}>
-        {[
-          ['⚗️', 'Reverse Alpha Math', 'B = (F − W·α) / (1−α) recovers the exact original pixel. Zero blur, zero artifacts — mathematically lossless within floating-point precision.'],
-          ['📊', 'Temporal Signature Estimation', 'Samples 24 frames across the video. Per-pixel temporal medians isolate the static watermark (W). Std-dev ratio across inside/outside regions estimates opacity α.'],
-          ['🎯', 'Gemini-Calibrated Presets', 'Box coordinates pre-tuned for Gemini Omni Spark logo (bottom-right) and Veo logo across 16:9 landscape and 9:16 portrait outputs.'],
-        ].map(([icon, title, desc]) => (
-          <div key={title} style={{ ...card, padding: '18px' }}>
-            <h4 style={{ color: '#fff', fontSize: '14px', fontWeight: 'bold', margin: '0 0 8px' }}>{icon} {title}</h4>
-            <p style={{ color: '#94a3b8', fontSize: '12px', margin: 0, lineHeight: '1.6' }}>{desc}</p>
-          </div>
-        ))}
-      </div>
-
     </ToolLayout>
   );
 }
