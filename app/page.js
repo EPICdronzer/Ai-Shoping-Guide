@@ -126,8 +126,11 @@ export default function Dashboard() {
   const [expandedTools, setExpandedTools] = useState({});
   const [isScrolled, setIsScrolled] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [activeCategories, setActiveCategories] = useState([]);
+  const [showCategoryPanel, setShowCategoryPanel] = useState(false);
   const floatingInputRef = useRef(null);
   const mainRef = useRef(null);
+  const filterPanelRef = useRef(null);
 
   useEffect(() => {
     const threshold = 100;
@@ -3125,28 +3128,105 @@ export default function Dashboard() {
     },
   ];
 
-  // Group filtered tools
-  const filteredTools = tools.filter(tool =>
-    tool.title.toLowerCase().includes(search.toLowerCase()) ||
-    tool.category.toLowerCase().includes(search.toLowerCase()) ||
-    tool.description.toLowerCase().includes(search.toLowerCase())
-  );
-
   // Group by category for rendering
   const categories = [...new Set(tools.map(t => t.category))];
 
+  // Category filters
+  const CATEGORY_FILTERS = [
+    { id: 'all', label: 'All Tools', match: null },
+    { id: 'image', label: 'Image', match: '🖼️ Image Tools' },
+    { id: 'pdf', label: 'PDF', match: '📄 PDF Tools' },
+    { id: 'video', label: 'Video', match: '🎬' },
+    { id: 'ai', label: 'AI Tools', match: ['🤖 AI Tools', '🔥 Trending AI Features'] },
+    { id: 'audio', label: 'Audio', match: '🎵' },
+    { id: 'recording', label: 'Recording', match: '📹 Recording Tools' },
+    { id: 'converter', label: 'Converter', match: '🔄' },
+    { id: 'developer', label: 'Developer', match: '💻 Developer Tools' },
+    { id: 'writing', label: 'Writing', match: '✍️' },
+    { id: 'social', label: 'Social Media', match: ['📱 Social Media Tools', '📱 Mobile Optimization'] },
+    { id: 'gif', label: 'GIF', match: '🎞️' },
+    { id: 'youtube', label: 'YouTube', match: '📺' },
+    { id: 'streaming', label: 'Streaming', match: '🎥' },
+    { id: 'optimization', label: 'Optimize', match: '⚙️' },
+    { id: 'professional', label: 'Pro Tools', match: '💼' },
+    { id: 'utilities', label: 'Utilities', match: '🛠️' },
+    { id: 'upscaler', label: 'Upscaler', match: null, keyword: 'upscal' },
+    { id: 'resizer', label: 'Resizer', match: null, keyword: 'resiz' },
+    { id: 'watermark', label: 'Watermark', match: null, keyword: 'watermark' },
+    { id: 'compressor', label: 'Compressor', match: null, keyword: 'compress' },
+    { id: 'downloader', label: 'Downloader', match: null, keyword: 'download' },
+  ];
+
+  // Group filtered tools
+  const filteredTools = tools.filter(tool => {
+    const textMatch =
+      tool.title.toLowerCase().includes(search.toLowerCase()) ||
+      tool.category.toLowerCase().includes(search.toLowerCase()) ||
+      tool.description.toLowerCase().includes(search.toLowerCase());
+
+    if (!textMatch) return false;
+    if (activeCategories.length === 0) return true;
+
+    return activeCategories.some(activeCatId => {
+      const catDef = CATEGORY_FILTERS.find(c => c.id === activeCatId);
+      if (!catDef) return false;
+      if (catDef.keyword) {
+        return (
+          tool.title.toLowerCase().includes(catDef.keyword) ||
+          tool.description.toLowerCase().includes(catDef.keyword) ||
+          tool.id.toLowerCase().includes(catDef.keyword)
+        );
+      }
+      if (!catDef.match) return false;
+      const matchArr = Array.isArray(catDef.match) ? catDef.match : [catDef.match];
+      return matchArr.some(m => tool.category.startsWith(m) || tool.category.includes(m.replace(/[^a-zA-Z ]/g, '').trim()));
+    });
+  });
+
+  const toggleCategory = (id) => {
+    if (id === 'all') {
+      setActiveCategories([]);
+      return;
+    }
+    setActiveCategories(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
   return (
     <>
+      <style>{`
+        .cat-chip {
+          display: inline-flex; align-items: center; gap: 5px;
+          padding: 7px 13px; border-radius: 10px;
+          font-size: 12px; font-weight: 600; cursor: pointer;
+          border: 1px solid rgba(167,139,250,0.18);
+          background: rgba(255,255,255,0.04);
+          color: #94a3b8;
+          transition: all 0.18s ease;
+          white-space: nowrap;
+          user-select: none;
+        }
+        .cat-chip:hover {
+          border-color: rgba(167,139,250,0.5);
+          color: #c084fc;
+          background: rgba(124,58,237,0.15);
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(124,58,237,0.2);
+        }
+        .cat-chip.active {
+          background: linear-gradient(135deg, rgba(124,58,237,0.35), rgba(79,70,229,0.25));
+          border-color: rgba(167,139,250,0.7);
+          color: #e879f9;
+          box-shadow: 0 0 16px rgba(124,58,237,0.3);
+        }
+      `}</style>
       <div className="bg-orbs" aria-hidden="true">
         <div className="bg-orb bg-orb-1" />
         <div className="bg-orb bg-orb-2" />
         <div className="bg-orb bg-orb-3" />
       </div>
       <div className="bg-grid" aria-hidden="true" />
-
-
-
-
 
       {/* ─── FULL-WIDTH HEADER ─── */}
       <header style={{
@@ -3179,35 +3259,139 @@ export default function Dashboard() {
           </div>
         ) : (
           /* SEARCH BAR MODE WHEN SCROLLED */
-          <div style={{ width: '100%', maxWidth: '600px', position: 'relative', display: 'flex', alignItems: 'center', animation: 'fadeIn 0.2s ease-in-out' }}>
-            <input
-              type="text"
-              placeholder="Search"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '8px 16px 8px 36px',
-                borderRadius: '10px',
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1.5px solid rgba(167, 139, 250, 0.4)',
-                color: '#fff',
-                fontSize: '14px',
-                outline: 'none',
-                transition: 'all 0.3s'
-              }}
-            />
-          
-            {search && (
-              <button 
-                onClick={() => setSearch('')}
+          <div style={{ width: '100%', maxWidth: '700px', position: 'relative', display: 'flex', alignItems: 'center', gap: '8px', animation: 'fadeIn 0.2s ease-in-out' }}>
+            <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <input
+                type="text"
+                placeholder="Search tools..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
                 style={{
-                  position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
-                  background: 'none', border: 'none', color: '#94a3b8', fontSize: '16px', cursor: 'pointer'
+                  width: '100%',
+                  height: '38px',
+                  boxSizing: 'border-box',
+                  padding: '8px 36px 8px 16px',
+                  borderRadius: '10px',
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1.5px solid rgba(167, 139, 250, 0.4)',
+                  color: '#fff',
+                  fontSize: '14px',
+                  outline: 'none',
+                  transition: 'all 0.3s'
+                }}
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  style={{
+                    position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', color: '#94a3b8', fontSize: '14px', cursor: 'pointer', zIndex: 2
+                  }}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Header Filter button — icon-only on mobile */}
+            <button
+              onClick={() => setShowCategoryPanel(v => !v)}
+              className="header-filter-btn"
+              style={{
+                flexShrink: 0,
+                display: 'flex', alignItems: 'center', gap: '5px',
+                padding: '8px 14px',
+                height: '38px',
+                boxSizing: 'border-box',
+                borderRadius: '10px',
+                background: showCategoryPanel || activeCategories.length > 0
+                  ? 'linear-gradient(135deg, rgba(124,58,237,0.4), rgba(79,70,229,0.3))'
+                  : 'rgba(255,255,255,0.05)',
+                border: `1.5px solid ${showCategoryPanel || activeCategories.length > 0 ? 'rgba(167,139,250,0.7)' : 'rgba(167,139,250,0.3)'}`,
+                color: showCategoryPanel || activeCategories.length > 0 ? '#c084fc' : '#94a3b8',
+                fontSize: '12px', fontWeight: '700',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                transition: 'all 0.2s ease',
+                boxShadow: showCategoryPanel ? '0 0 14px rgba(124,58,237,0.3)' : 'none',
+              }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+              </svg>
+              <span className="filter-btn-text">Filter</span>
+              {activeCategories.length > 0 && (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  width: '16px', height: '16px', borderRadius: '50%',
+                  background: 'rgba(167,139,250,0.35)', fontSize: '9px', color: '#fff', fontWeight: '900'
+                }}>{activeCategories.length}</span>
+              )}
+              <span className="filter-chevron" style={{ fontSize: '9px', transition: 'transform 0.2s', display: 'inline-block', transform: showCategoryPanel ? 'rotate(180deg)' : 'rotate(0deg)' }}>▾</span>
+            </button>
+
+            {/* Header dropdown panel — fixed just below sticky header, scrolls with page */}
+            {showCategoryPanel && isScrolled && (
+              <div
+                style={{
+                  position: 'fixed',
+                  top: '58px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: '100%',
+                  maxWidth: '700px',
+                  zIndex: 200,
+                  background: 'rgba(5, 3, 14, 0.97)',
+                  backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+                  border: '1px solid rgba(167,139,250,0.25)',
+                  borderTop: 'none',
+                  borderRadius: '0 0 18px 18px',
+                  padding: '16px 20px 20px',
+                  boxShadow: '0 20px 60px rgba(0,0,0,0.7)',
+                  animation: 'headerFilterPanelIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
                 }}
               >
-                ✕
-              </button>
+                <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '10px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px' }}>Browse by Category</span>
+                    {activeCategories.length > 0 && (
+                      <button onClick={() => setActiveCategories([])} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '10px', cursor: 'pointer', textDecoration: 'underline' }}>Clear all</button>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setShowCategoryPanel(false)}
+                    style={{ background: 'none', border: 'none', color: '#475569', fontSize: '15px', cursor: 'pointer', lineHeight: 1 }}
+                  >✕</button>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
+                  {CATEGORY_FILTERS.map(cat => (
+                    <button
+                      key={cat.id}
+                      className={`cat-chip${(cat.id === 'all' ? activeCategories.length === 0 : activeCategories.includes(cat.id)) ? ' active' : ''}`}
+                      onClick={() => toggleCategory(cat.id)}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div style={{ fontSize: '10px', color: '#475569', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>Popular Shortcuts</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {['upscaler', 'resizer', 'watermark', 'compressor', 'downloader'].map(id => {
+                      const c = CATEGORY_FILTERS.find(x => x.id === id);
+                      return (
+                        <button
+                          key={id}
+                          className={`cat-chip${activeCategories.includes(id) ? ' active' : ''}`}
+                          onClick={() => toggleCategory(id)}
+                        >
+                          {c?.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -3247,7 +3431,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Search Box */}
+          {/* Search Box + Filter */}
           <div style={{
             width: '100%',
             maxWidth: '600px',
@@ -3257,37 +3441,209 @@ export default function Dashboard() {
             visibility: isScrolled ? 'hidden' : 'visible',
             transition: 'opacity 0.25s ease, visibility 0.25s ease',
           }}>
-            <input
-              type="text"
-              className="dashboard-search-input"
-              placeholder="Search tools : PDF, Image, AI, QR Code, Converter..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '16px 20px',
-                borderRadius: '14px',
-                background: 'rgba(10, 8, 28, 0.75)',
-                border: '1.5px solid rgba(167, 139, 250, 0.3)',
-                color: '#fff',
-                fontSize: '15px',
-                outline: 'none',
-                boxShadow: '0 8px 32px 0 rgba(167, 139, 250, 0.05)',
-                transition: 'all 0.3s'
-              }}
-              onFocus={e => e.target.style.borderColor = 'rgba(167, 139, 250, 0.8)'}
-              onBlur={e => e.target.style.borderColor = 'rgba(167, 139, 250, 0.3)'}
-            />
-            {search && (
-              <button 
-                onClick={() => setSearch('')}
+            <style>{`
+              .filter-btn-text { display: inline; }
+              .filter-chevron { display: inline-block; }
+              .hero-filter-btn { padding: 14px 18px; min-width: unset; }
+              .header-filter-btn { padding: 8px 14px; min-width: unset; }
+              @keyframes heroFilterPanelIn {
+                from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+                to   { opacity: 1; transform: translateY(0) scale(1); }
+              }
+              @keyframes headerFilterPanelIn {
+                from { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(0.98); }
+                to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+              }
+              @media (max-width: 600px) {
+                .filter-btn-text { display: none !important; }
+                .filter-chevron { display: none !important; }
+                .hero-filter-btn {
+                  padding: 0 !important;
+                  width: 54px !important;
+                  height: 54px !important;
+                  min-width: 54px !important;
+                  border-radius: 14px !important;
+                  justify-content: center !important;
+                  gap: 0 !important;
+                }
+                .header-filter-btn {
+                  padding: 0 !important;
+                  width: 38px !important;
+                  height: 38px !important;
+                  min-width: 38px !important;
+                  border-radius: 10px !important;
+                  justify-content: center !important;
+                  gap: 0 !important;
+                }
+                .clear-x-btn { right: 60px !important; }
+              }
+            `}</style>
+
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  className="dashboard-search-input"
+                  placeholder="Search tools : PDF, Image, AI, QR Code, Converter..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  style={{
+                    width: '100%',
+                    height: '54px',
+                    boxSizing: 'border-box',
+                    padding: '16px 44px 16px 20px',
+                    borderRadius: '14px',
+                    background: 'rgba(10, 8, 28, 0.75)',
+                    border: '1.5px solid rgba(167, 139, 250, 0.3)',
+                    color: '#fff',
+                    fontSize: '15px',
+                    outline: 'none',
+                    boxShadow: '0 8px 32px 0 rgba(167, 139, 250, 0.05)',
+                    transition: 'all 0.3s',
+                    minWidth: 0,
+                  }}
+                  onFocus={e => e.target.style.borderColor = 'rgba(167, 139, 250, 0.8)'}
+                  onBlur={e => e.target.style.borderColor = 'rgba(167, 139, 250, 0.3)'}
+                />
+                {search && (
+                  <button
+                    className="clear-x-btn"
+                    onClick={() => setSearch('')}
+                    style={{
+                      position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)',
+                      background: 'none', border: 'none', color: '#94a3b8', fontSize: '18px', cursor: 'pointer', zIndex: 2
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Filter button */}
+              <button
+                id="category-filter-btn"
+                className="hero-filter-btn"
+                onClick={() => setShowCategoryPanel(v => !v)}
                 style={{
-                  position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)',
-                  background: 'none', border: 'none', color: '#94a3b8', fontSize: '18px', cursor: 'pointer'
+                  flexShrink: 0,
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  height: '54px',
+                  boxSizing: 'border-box',
+                  borderRadius: '14px',
+                  background: showCategoryPanel || activeCategories.length > 0
+                    ? 'linear-gradient(135deg, rgba(124,58,237,0.35), rgba(79,70,229,0.25))'
+                    : 'rgba(10, 8, 28, 0.75)',
+                  border: `1.5px solid ${showCategoryPanel || activeCategories.length > 0 ? 'rgba(167,139,250,0.7)' : 'rgba(167,139,250,0.3)'}`,
+                  color: showCategoryPanel || activeCategories.length > 0 ? '#c084fc' : '#94a3b8',
+                  fontSize: '13px', fontWeight: '700',
+                  cursor: 'pointer',
+                  transition: 'all 0.25s ease',
+                  whiteSpace: 'nowrap',
+                  boxShadow: showCategoryPanel ? '0 0 18px rgba(124,58,237,0.35)' : 'none',
+                  letterSpacing: '0.3px',
+                  position: 'relative',
                 }}
               >
-                ✕
+                {/* Funnel icon — always visible */}
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                </svg>
+                <span className="filter-btn-text">Filter</span>
+                {activeCategories.length > 0 && (
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    width: '18px', height: '18px', borderRadius: '50%',
+                    background: 'rgba(167,139,250,0.3)', fontSize: '10px', color: '#fff', fontWeight: '900'
+                  }}>{activeCategories.length}</span>
+                )}
+                <span className="filter-chevron" style={{ fontSize: '10px', marginLeft: '2px', transition: 'transform 0.25s', display: 'inline-block', transform: showCategoryPanel ? 'rotate(180deg)' : 'rotate(0deg)' }}>▾</span>
               </button>
+            </div>
+
+            {/* Active category pills */}
+            {activeCategories.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '12px', color: '#64748b' }}>Filtering by:</span>
+                {activeCategories.map(id => {
+                  const catDef = CATEGORY_FILTERS.find(c => c.id === id);
+                  return (
+                    <span key={id} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '5px',
+                      padding: '4px 10px 4px 8px', borderRadius: '20px',
+                      background: 'rgba(124,58,237,0.18)', border: '1px solid rgba(167,139,250,0.35)',
+                      color: '#c084fc', fontSize: '12px', fontWeight: '700',
+                    }}>
+                      {catDef?.label}
+                      <button onClick={() => toggleCategory(id)} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '12px', cursor: 'pointer', padding: '0 0 0 4px', lineHeight: 1 }}>✕</button>
+                    </span>
+                  );
+                })}
+                <button onClick={() => setActiveCategories([])} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline' }}>Clear all</button>
+                <span style={{ fontSize: '12px', color: '#475569' }}>{filteredTools.length} tools</span>
+              </div>
+            )}
+
+            {/* Category Panel */}
+            {showCategoryPanel && !isScrolled && (
+              <div
+                ref={filterPanelRef}
+                style={{
+                  position: 'absolute', top: 'calc(100% + 12px)', left: 0, right: 0,
+                  zIndex: 100,
+                  background: 'rgba(5, 3, 14, 0.96)',
+                  backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+                  border: '1px solid rgba(167,139,250,0.25)',
+                  borderRadius: '18px',
+                  padding: '20px',
+                  boxShadow: '0 20px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(167,139,250,0.08)',
+                  animation: 'heroFilterPanelIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+                }}
+              >
+
+                <div style={{ marginBottom: '14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px' }}>Browse by Category</span>
+                    {activeCategories.length > 0 && (
+                      <button onClick={() => setActiveCategories([])} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline' }}>Clear all</button>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setShowCategoryPanel(false)}
+                    style={{ background: 'none', border: 'none', color: '#475569', fontSize: '16px', cursor: 'pointer', lineHeight: 1 }}
+                  >✕</button>
+                </div>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {CATEGORY_FILTERS.map(cat => (
+                    <button
+                      key={cat.id}
+                      className={`cat-chip${(cat.id === 'all' ? activeCategories.length === 0 : activeCategories.includes(cat.id)) ? ' active' : ''}`}
+                      onClick={() => toggleCategory(cat.id)}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Popular Shortcuts */}
+                <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div style={{ fontSize: '10px', color: '#475569', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '10px' }}>Popular Shortcuts</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {['upscaler', 'resizer', 'watermark', 'compressor', 'downloader'].map(id => {
+                      const c = CATEGORY_FILTERS.find(x => x.id === id);
+                      return (
+                        <button
+                          key={id}
+                          className={`cat-chip${activeCategories.includes(id) ? ' active' : ''}`}
+                          onClick={() => toggleCategory(id)}
+                        >
+                          {c?.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
             )}
           </div>
 
